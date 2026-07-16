@@ -151,7 +151,7 @@ ${propsArray
       const type = this.constructor.propTypes[name];
       
       let parsedValue = newValue;
-      if (newValue === null || newValue === undefined || newValue === 'null' || newValue === 'undefined') {
+      if (newValue === null || newValue === undefined) {
         parsedValue = this._defaults[name];
       } else if (type === 'Number') {
         parsedValue = Number(newValue);
