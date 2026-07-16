@@ -1,4 +1,4 @@
-import { defineComponent } from '@kitbash/sdk';
+import { defineComponent } from '@ktbsh/sdk';
 
 export default defineComponent({
   tag: 'my-button',
