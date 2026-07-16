@@ -1,9 +1,9 @@
 import { cp, rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 
-const projectDir = process.cwd();
-const srcTemplate = resolve(projectDir, '../../templates/default');
-const destTemplate = resolve(projectDir, 'templates/default');
+const scriptDir = import.meta.dir;
+const srcTemplate = resolve(scriptDir, '../../../templates/default');
+const destTemplate = resolve(scriptDir, '../templates/default');
 
 await rm(destTemplate, { recursive: true, force: true });
 await cp(srcTemplate, destTemplate, {

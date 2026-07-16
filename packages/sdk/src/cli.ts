@@ -84,7 +84,10 @@ async function main() {
         if (targetPkg.devDependencies?.['@kitbash/sdk'] === 'workspace:*') {
           targetPkg.devDependencies['@kitbash/sdk'] = sdkVersion;
         }
-        await Bun.write(scaffoldedPkgPath, JSON.stringify(targetPkg, null, 2));
+        await Bun.write(
+          scaffoldedPkgPath,
+          `${JSON.stringify(targetPkg, null, 2)}\n`,
+        );
       }
 
       console.log(`✅ Project scaffolded successfully.`);
