@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+bun.lockb
+AGENTS.md
+GEMINI.md
+TODO.md

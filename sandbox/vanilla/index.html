@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vanilla Sandbox</title>
+</head>
+<body>
+  <div style="padding: 20px; font-family: sans-serif;">
+    <h1>Vanilla JS Sandbox</h1>
+    <script type="module">
+      import '../../templates/default/dist/vanilla/button.js';
+      import '../../templates/default/dist/vanilla/input.js';
+    </script>
+    <my-button variant="primary" onclick="alert('Vanilla event triggered')">Click Me (Vanilla)</my-button>
+
+    <form id="test-form" onsubmit="event.preventDefault(); alert(new FormData(event.target).get('username'));" style="margin-top: 20px;">
+      <kitbash-input name="username" required="true" placeholder="Enter username..."></kitbash-input>
+      <button type="submit" style="margin-left: 10px;">Submit</button>
+    </form>
+  </div>
+</body>
+</html>

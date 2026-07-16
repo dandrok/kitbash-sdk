@@ -1,0 +1,14 @@
+{
+  "name": "@kitbash/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "kitbash": "./src/cli.ts"
+  },
+  "devDependencies": {
+    "bun-types": "1.3.14",
+    "uhtml": "4.7.1"
+  }
+}
