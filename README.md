@@ -12,6 +12,16 @@ Kitbash is designed to run on the bleeding edge of the web, guaranteeing a robus
 ### The uhtml v4 Architectural Pin
 Our core compiler is intentionally powered by **`uhtml@4.7.1`**. We deliberately bypass the unoptimized signal-rewrite and conditional array rendering issues present in `uhtml` v5. By locking onto the v4 line, Kitbash achieves raw performance, absolute rendering predictability, and battle-tested DOM-diffing stability natively inside the Shadow DOM without sacrificing syntax ergonomics.
 
+## Installation
+
+Kitbash is engineered exclusively for Bun. Install the SDK using Bun's native package manager:
+
+```bash
+bun add @ktbsh/sdk
+# or globally for CLI usage
+bun add -g @ktbsh/sdk
+```
+
 ## 2. Dynamic Architecture Diagram & Flow
 
 ```text
@@ -59,7 +69,7 @@ To deliver a world-class developer experience, the SDK compiler automatically ha
 *Defining a component once using `defineComponent`:*
 
 ```typescript
-import { defineComponent } from '@kitbash/sdk';
+import { defineComponent } from '@ktbsh/sdk';
 
 export default defineComponent({
   tag: 'kitbash-input',
@@ -104,7 +114,7 @@ export default defineComponent({
 
 ```tsx
 import { useState } from 'react';
-import { KitbashInput } from '@kitbash/sdk/react/input';
+import { KitbashInput } from 'my-design-system/react/input.js';
 
 export function App() {
   const [val, setVal] = useState('');
@@ -127,7 +137,7 @@ export function App() {
 
 ```svelte
 <script lang="ts">
-  import '@kitbash/sdk/vanilla/input.js';
+  import 'my-design-system/vanilla/input.js';
   let val = $state('');
 </script>
 

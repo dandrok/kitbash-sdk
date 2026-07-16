@@ -104,9 +104,11 @@ ${propsArray
       if (isTrue) this.setAttribute('${prop}', '');
       else this.removeAttribute('${prop}');
     } else {
-      this.setAttribute('${prop}', val);
+      if (val === null || val === undefined) this.removeAttribute('${prop}');
+      else this.setAttribute('${prop}', val);
     }
-    ${config.formAssociated && prop === 'value' ? 'this._internals.setFormValue(val);' : ''}
+    ${config.formAssociated && prop === 'value' ? 'if (this._internals) this._internals.setFormValue(val);' : ''}
+    this.update();
   }
 `,
   )
@@ -118,7 +120,7 @@ ${propsArray
     ${config.formAssociated ? 'this._internals = this.attachInternals();' : ''}
     this.shadowRoot.adoptedStyleSheets = [sheet];
     
-    const defaults = ${JSON.stringify(
+    this._defaults = ${JSON.stringify(
       Object.fromEntries(
         Object.entries(config.props || {}).map(([k, v]) => [
           k,
@@ -128,20 +130,14 @@ ${propsArray
     )};
     
     this._state = ${JSON.stringify(config.state || {})};
-    this._props = { ...defaults };
+    this._props = { ...this._defaults };
     this._eventHandlers = ${eventsObjStr};
     this._eventCleanup = [];
     this._renderFn = ${renderFnStr};
   }
 
   connectedCallback() {
-    ${propsJson}.forEach(prop => {
-      if (this.hasAttribute(prop)) {
-        const type = this.constructor.propTypes[prop];
-        const val = this.getAttribute(prop);
-        this._props[prop] = type === 'Boolean' ? val !== null : val;
-      }
-    });
+    // Initial attribute values are parsed by attributeChangedCallback before connectedCallback fires
     this.update();
     ${config.formAssociated ? `if (this.value !== undefined) this._internals.setFormValue(this.value);` : ''}
   }
@@ -153,7 +149,17 @@ ${propsArray
   attributeChangedCallback(name, oldValue, newValue) {
     if (oldValue !== newValue) {
       const type = this.constructor.propTypes[name];
-      this._props[name] = type === 'Boolean' ? newValue !== null : newValue;
+      
+      let parsedValue = newValue;
+      if (newValue === null || newValue === undefined || newValue === 'null' || newValue === 'undefined') {
+        parsedValue = this._defaults[name];
+      } else if (type === 'Number') {
+        parsedValue = Number(newValue);
+      } else if (type === 'Boolean') {
+        parsedValue = newValue !== null && newValue !== 'false';
+      }
+      
+      this._props[name] = parsedValue;
       this.update();
     }
   }
