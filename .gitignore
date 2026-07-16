@@ -5,3 +5,6 @@ bun.lockb
 AGENTS.md
 GEMINI.md
 TODO.md
+# pack / publish artifacts
+*.tgz
+packages/sdk/*.tgz

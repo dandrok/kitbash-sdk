@@ -42,10 +42,10 @@ async function main() {
 
     console.log(`\n🚀 Scaffolding Kitbash project in ${targetDir}...\n`);
 
-    let templateDir = resolve(import.meta.dir, '../../../templates/default');
+    let templateDir = resolve(import.meta.dir, '../templates/default');
     if (!existsSync(templateDir)) {
-      // Fallback for when the SDK is installed as an npm package
-      templateDir = resolve(import.meta.dir, '../templates/default');
+      // Fallback for local monorepo development if it wasn't built yet
+      templateDir = resolve(import.meta.dir, '../../../templates/default');
     }
 
     try {
@@ -63,6 +63,29 @@ async function main() {
           return !excludedPatterns.includes(basename(src));
         },
       });
+
+      const scaffoldedPkgPath = resolve(targetDir, 'package.json');
+      if (existsSync(scaffoldedPkgPath)) {
+        let sdkVersion = '^0.1.0';
+        try {
+          const sdkPkgPath = resolve(import.meta.dir, '../package.json');
+          if (existsSync(sdkPkgPath)) {
+            const sdkPkg = await Bun.file(sdkPkgPath).json();
+            if (sdkPkg.version) sdkVersion = `^${sdkPkg.version}`;
+          }
+        } catch (_e) {
+          // Fallback to ^0.1.0 if read fails
+        }
+
+        const targetPkg = await Bun.file(scaffoldedPkgPath).json();
+        if (targetPkg.dependencies?.['@kitbash/sdk'] === 'workspace:*') {
+          targetPkg.dependencies['@kitbash/sdk'] = sdkVersion;
+        }
+        if (targetPkg.devDependencies?.['@kitbash/sdk'] === 'workspace:*') {
+          targetPkg.devDependencies['@kitbash/sdk'] = sdkVersion;
+        }
+        await Bun.write(scaffoldedPkgPath, JSON.stringify(targetPkg, null, 2));
+      }
 
       console.log(`✅ Project scaffolded successfully.`);
       console.log(`\nNext steps:`);
