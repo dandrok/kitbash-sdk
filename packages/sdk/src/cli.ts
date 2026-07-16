@@ -78,11 +78,11 @@ async function main() {
         }
 
         const targetPkg = await Bun.file(scaffoldedPkgPath).json();
-        if (targetPkg.dependencies?.['@kitbash/sdk'] === 'workspace:*') {
-          targetPkg.dependencies['@kitbash/sdk'] = sdkVersion;
+        if (targetPkg.dependencies?.['@ktbsh/sdk'] === 'workspace:*') {
+          targetPkg.dependencies['@ktbsh/sdk'] = sdkVersion;
         }
-        if (targetPkg.devDependencies?.['@kitbash/sdk'] === 'workspace:*') {
-          targetPkg.devDependencies['@kitbash/sdk'] = sdkVersion;
+        if (targetPkg.devDependencies?.['@ktbsh/sdk'] === 'workspace:*') {
+          targetPkg.devDependencies['@ktbsh/sdk'] = sdkVersion;
         }
         await Bun.write(
           scaffoldedPkgPath,
@@ -116,7 +116,7 @@ async function main() {
     }
   } else {
     console.log(`
-@kitbash/sdk CLI
+@ktbsh/sdk CLI
 
 Commands:
   init <project-name>   Scaffold a new design system
