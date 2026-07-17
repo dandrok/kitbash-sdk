@@ -21,6 +21,7 @@ describe('loadProjectConfig', () => {
     try {
       const cfg = await loadProjectConfig(empty);
       expect(cfg.source).toBe('defaults');
+      expect(cfg.tokensConfigured).toBe(false);
       expect(cfg.componentsDir).toBe(resolve(empty, 'src/components'));
       expect(cfg.tokensFile).toBe(resolve(empty, 'src/tokens.json'));
       expect(cfg.outDir).toBe(resolve(empty, 'dist'));
@@ -43,9 +44,23 @@ describe('loadProjectConfig', () => {
 
     const cfg = await loadProjectConfig(dir);
     expect(cfg.source).toBe('kitbash.config.ts');
+    expect(cfg.tokensConfigured).toBe(true);
     expect(cfg.componentsDir).toBe(resolve(dir, 'lib/ui'));
     expect(cfg.tokensFile).toBe(resolve(dir, 'design/tokens.json'));
     expect(cfg.outDir).toBe(resolve(dir, 'build'));
+  });
+
+  test('rejects empty path fields', async () => {
+    const bad = await mkdtemp(join(tmpdir(), 'kitbash-cfg-bad-'));
+    try {
+      await writeFile(
+        join(bad, 'kitbash.config.ts'),
+        `export default { components: '', outDir: './dist' };\n`,
+      );
+      await expect(loadProjectConfig(bad)).rejects.toThrow(/components/);
+    } finally {
+      await rm(bad, { recursive: true, force: true });
+    }
   });
 });
 

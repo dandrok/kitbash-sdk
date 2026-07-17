@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 import { existsSync, type FSWatcher, watch } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { basename, dirname, resolve, sep } from 'node:path';
 import { compileComponents } from '../packages/sdk/src/compiler.js';
-import { loadProjectConfig } from '../packages/sdk/src/config.js';
+import {
+  type KitbashProjectConfig,
+  loadProjectConfig,
+} from '../packages/sdk/src/config.js';
 
 const projectDir = resolve(import.meta.dir, '../templates/default');
 
@@ -22,14 +25,32 @@ function clearWatchers() {
   watchers.length = 0;
 }
 
+function nearestExisting(path: string): string | null {
+  let cur = path;
+  for (let i = 0; i < 32; i++) {
+    if (existsSync(cur)) return cur;
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return null;
+}
+
+function isUnderOutDir(cfg: KitbashProjectConfig, absFile: string) {
+  const out = cfg.outDir.endsWith(sep) ? cfg.outDir : cfg.outDir + sep;
+  return absFile === cfg.outDir || absFile.startsWith(out);
+}
+
 function watchPath(
   path: string,
   opts: { recursive?: boolean },
-  onEvent: () => void,
+  onEvent: (filename: string | null) => void,
 ) {
   if (!existsSync(path)) return;
   try {
-    const w = watch(path, opts, () => onEvent());
+    const w = watch(path, opts, (_event, filename) => {
+      onEvent(filename?.toString() ?? null);
+    });
     w.on('error', (err) => {
       console.warn(`⚠️ Watcher error (${path}):`, err);
     });
@@ -39,22 +60,53 @@ function watchPath(
   }
 }
 
+function watchPathOrAncestor(
+  target: string,
+  opts: { recursive?: boolean },
+  onEvent: (filename: string | null) => void,
+  onMaybeCreated: () => void,
+) {
+  if (existsSync(target)) {
+    watchPath(target, opts, onEvent);
+    return;
+  }
+  const ancestor = nearestExisting(dirname(target));
+  if (!ancestor) return;
+  watchPath(ancestor, { recursive: true }, () => {
+    if (existsSync(target)) onMaybeCreated();
+  });
+}
+
 async function attachWatchers() {
   clearWatchers();
   const cfg = await loadProjectConfig(projectDir);
 
-  if (existsSync(cfg.componentsDir)) {
-    watchPath(cfg.componentsDir, { recursive: true }, () => {
-      schedule('components');
-    });
-  }
-  if (existsSync(cfg.tokensFile)) {
-    watchPath(cfg.tokensFile, {}, () => {
-      schedule(`tokens ${basename(cfg.tokensFile)}`);
-    });
-  }
+  watchPathOrAncestor(
+    cfg.componentsDir,
+    { recursive: true },
+    (name) => {
+      if (!name || !(name.endsWith('.ts') || name.endsWith('.js'))) return;
+      const abs = resolve(cfg.componentsDir, name);
+      if (isUnderOutDir(cfg, abs)) return;
+      schedule(`components ${name}`);
+    },
+    () => schedule('components-dir-created'),
+  );
+
+  watchPathOrAncestor(
+    cfg.tokensFile,
+    {},
+    () => schedule(`tokens ${basename(cfg.tokensFile)}`),
+    () => schedule('tokens-file-created'),
+  );
+
   for (const name of ['kitbash.config.ts', 'kitbash.config.js'] as const) {
-    watchPath(resolve(projectDir, name), {}, () => schedule(name));
+    watchPathOrAncestor(
+      resolve(projectDir, name),
+      {},
+      () => schedule(name),
+      () => schedule(`${name}-created`),
+    );
   }
 
   console.log(
@@ -81,6 +133,7 @@ async function build(reason = 'rebuild') {
     await compileComponents(projectDir, latest.outDir, {
       componentsDir: latest.componentsDir,
       tokensFile: latest.tokensFile,
+      warnIfTokensMissing: latest.tokensConfigured,
     });
     console.log('✅ Build complete!');
   } catch (e) {
@@ -116,7 +169,6 @@ try {
 
 await build('initial');
 
-// Start Vite sandbox
 const _viteProcess = Bun.spawn(['bun', 'run', 'vite'], {
   cwd: resolve(import.meta.dir, '../sandbox'),
   stdio: ['inherit', 'inherit', 'inherit'],

@@ -92,6 +92,10 @@ export default {
     expect(react).toContain("typeof ref === 'function'");
     // Do not double-bind click — React handles onClick via props
     expect(react).not.toContain("addEventListener('click'");
+    // Callback ref assignment + clear path (function refs get null on unmount)
+    expect(react).toContain('setRefs');
+    expect(react).toContain("typeof ref === 'function'");
+    expect(react).toContain('ref.current = node');
   });
 
   test('prop reflection does not re-enter attributeChangedCallback', async () => {

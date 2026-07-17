@@ -10,13 +10,19 @@ export type KitbashCommit = (patch: {
   state?: Record<string, unknown>;
 }) => void;
 
+/** uhtml-style tagged template (exact runtime comes from generated code). */
+export type KitbashHtml = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => unknown;
+
 export interface KitbashRenderContext {
   props: Record<string, unknown>;
   state: Record<string, unknown>;
   setState: (state: Record<string, unknown>) => void;
   setProps: (props: Record<string, unknown>) => void;
   commit: KitbashCommit;
-  html: unknown;
+  html: KitbashHtml;
 }
 
 export interface KitbashEventContext {

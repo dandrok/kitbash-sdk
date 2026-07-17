@@ -10,6 +10,8 @@ export interface KitbashProjectConfig {
   tokensFile: string;
   /** Absolute output directory */
   outDir: string;
+  /** True when config explicitly set `tokens` (missing file should warn). */
+  tokensConfigured: boolean;
   /** Raw fields from kitbash.config (for logging) */
   source: 'defaults' | 'kitbash.config.ts' | 'kitbash.config.js';
 }
@@ -76,17 +78,29 @@ export async function loadProjectConfig(
     );
   }
 
-  const componentsRel =
-    typeof raw.components === 'string' ? raw.components : DEFAULTS.components;
-  const tokensRel =
-    typeof raw.tokens === 'string' ? raw.tokens : DEFAULTS.tokens;
-  const outDirRel =
-    typeof raw.outDir === 'string' ? raw.outDir : DEFAULTS.outDir;
+  const pathField = (key: 'components' | 'tokens' | 'outDir'): string => {
+    if (!(key in raw) || raw[key] === undefined) {
+      return DEFAULTS[key];
+    }
+    const v = raw[key];
+    if (typeof v !== 'string' || v.trim() === '') {
+      throw new Error(
+        `kitbash.config: "${key}" must be a non-empty string (got ${JSON.stringify(v)})`,
+      );
+    }
+    return v;
+  };
+
+  const componentsRel = pathField('components');
+  const tokensRel = pathField('tokens');
+  const outDirRel = pathField('outDir');
+  const tokensConfigured = Object.hasOwn(raw, 'tokens');
 
   return {
     componentsDir: resolveFromProject(projectDir, componentsRel),
     tokensFile: resolveFromProject(projectDir, tokensRel),
     outDir: resolveFromProject(projectDir, outDirRel),
+    tokensConfigured: source !== 'defaults' && tokensConfigured,
     source,
   };
 }

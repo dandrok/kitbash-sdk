@@ -10,6 +10,7 @@ export async function runProjectBuild(projectDir: string) {
   await compileComponents(projectDir, cfg.outDir, {
     componentsDir: cfg.componentsDir,
     tokensFile: cfg.tokensFile,
+    warnIfTokensMissing: cfg.tokensConfigured,
   });
   return cfg;
 }

@@ -354,18 +354,17 @@ export const ${pascalName} = React.forwardRef(({ children, onKitbashChange, ...p
     return () => el.removeEventListener('kitbash-change', handleCustomChange);
   }, [onKitbashChange]);
 
-  React.useEffect(() => {
-    const node = innerRef.current;
+  // Callback ref: assign + clear on unmount / ref change (object + function refs).
+  const setRefs = React.useCallback((node) => {
+    innerRef.current = node;
     if (typeof ref === 'function') {
       ref(node);
-      return () => ref(null);
-    }
-    if (ref && typeof ref === 'object') {
+    } else if (ref && typeof ref === 'object') {
       ref.current = node;
     }
   }, [ref]);
 
-  return React.createElement('${config.tag}', { ref: innerRef, ...props }, children);
+  return React.createElement('${config.tag}', { ref: setRefs, ...props }, children);
 });
 `;
 
@@ -407,6 +406,8 @@ export type CompileOptions = {
   componentsDir?: string;
   /** Absolute or projectDir-relative tokens JSON path */
   tokensFile?: string;
+  /** When true, warn if tokensFile does not exist (custom config path). */
+  warnIfTokensMissing?: boolean;
 };
 
 export async function compileComponents(
@@ -442,9 +443,10 @@ export async function compileComponents(
     } catch (err) {
       console.warn('⚠️ Failed to parse tokens file:', err);
     }
-  } else {
-    // Optional tokens — missing file is fine (no CSS vars from tokens).
+  } else if (options.warnIfTokensMissing) {
+    console.warn(`⚠️ Tokens file not found (configured path): ${tokensFile}`);
   }
+  // Default tokens path missing → silent skip (optional by design).
 
   const cemModules = [];
 

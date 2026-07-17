@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, type FSWatcher, watch } from 'node:fs';
 import { cp } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { basename, dirname, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { KitbashProjectConfig } from './config.js';
 
@@ -177,6 +177,22 @@ async function main() {
       watchers.length = 0;
     };
 
+    const nearestExisting = (path: string): string | null => {
+      let cur = path;
+      for (let i = 0; i < 32; i++) {
+        if (existsSync(cur)) return cur;
+        const parent = dirname(cur);
+        if (parent === cur) break;
+        cur = parent;
+      }
+      return null;
+    };
+
+    const isUnderOutDir = (cfg: KitbashProjectConfig, absFile: string) => {
+      const out = cfg.outDir.endsWith(sep) ? cfg.outDir : cfg.outDir + sep;
+      return absFile === cfg.outDir || absFile.startsWith(out);
+    };
+
     const watchPath = (
       path: string,
       opts: { recursive?: boolean },
@@ -197,34 +213,58 @@ async function main() {
       }
     };
 
+    /** Watch path or nearest ancestor until path appears (then next rebuild rebinds). */
+    const watchPathOrAncestor = (
+      target: string,
+      opts: { recursive?: boolean },
+      onEvent: (event: string, filename: string | null) => void,
+      onMaybeCreated: () => void,
+    ) => {
+      if (existsSync(target)) {
+        watchPath(target, opts, onEvent);
+        return;
+      }
+      const ancestor = nearestExisting(dirname(target));
+      if (!ancestor) return;
+      watchPath(ancestor, { recursive: true }, () => {
+        if (existsSync(target)) onMaybeCreated();
+      });
+    };
+
     const attachWatchers = (
       cfg: KitbashProjectConfig,
       schedule: (reason: string) => void,
     ) => {
       clearWatchers();
 
-      // Never watch outDir — emit would loop.
-      if (existsSync(cfg.componentsDir)) {
-        watchPath(cfg.componentsDir, { recursive: true }, (event, name) => {
-          if (name && (name.endsWith('.ts') || name.endsWith('.js'))) {
-            schedule(`${event} ${name}`);
-          }
-        });
-      }
+      // Never schedule rebuilds for files under outDir (nested outDir under components).
+      watchPathOrAncestor(
+        cfg.componentsDir,
+        { recursive: true },
+        (event, name) => {
+          if (!name || !(name.endsWith('.ts') || name.endsWith('.js'))) return;
+          const abs = resolve(cfg.componentsDir, name);
+          if (isUnderOutDir(cfg, abs)) return;
+          schedule(`${event} ${name}`);
+        },
+        () => schedule('components-dir-created'),
+      );
 
-      if (existsSync(cfg.tokensFile)) {
-        watchPath(cfg.tokensFile, {}, () => {
-          schedule(`tokens ${basename(cfg.tokensFile)}`);
-        });
-      }
+      watchPathOrAncestor(
+        cfg.tokensFile,
+        {},
+        () => schedule(`tokens ${basename(cfg.tokensFile)}`),
+        () => schedule('tokens-file-created'),
+      );
 
       for (const name of ['kitbash.config.ts', 'kitbash.config.js'] as const) {
         const p = resolve(projectDir, name);
-        if (existsSync(p)) {
-          watchPath(p, {}, () => {
-            schedule(name);
-          });
-        }
+        watchPathOrAncestor(
+          p,
+          {},
+          () => schedule(name),
+          () => schedule(`${name}-created`),
+        );
       }
     };
 
