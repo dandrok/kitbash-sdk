@@ -1,6 +1,6 @@
 {
   "name": "@ktbsh/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "engines": {
     "bun": ">=1.0.0"
@@ -10,7 +10,7 @@
   "bin": {
     "kitbash": "dist/cli.js"
   },
-  "description": "Enterprise-grade compiler-driven Web Component design system engine.",
+  "description": "Compiler-driven toolkit for building design-system components as Web Components (with React wrappers).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kitbash/sdk.git"
