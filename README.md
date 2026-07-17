@@ -146,6 +146,10 @@ export default defineComponent({
   events: {
     'input input'(e: Event, { setState }) {
       const target = e.target as HTMLInputElement;
+      const host = (target.getRootNode() as ShadowRoot).host as HTMLElement & {
+        value: string;
+      };
+      host.value = target.value;
       setState({ value: target.value });
     },
   },
@@ -213,10 +217,52 @@ Details and caveats live in the [SDK README](./packages/sdk/README.md).
 
 | Topic | Detail |
 |-------|--------|
-| **Two “default” templates** | `packages/sdk/templates/default` is what `kitbash init` copies for users ([README](./packages/sdk/templates/default/README.md)). `templates/default` is the monorepo fixture ([README](./templates/default/README.md)). Overview: [templates/README.md](./templates/README.md). Keep example components roughly in sync when you change scaffolds. |
+| **Two “default” templates** | `templates/default` is the **canonical** fixture ([README](./templates/default/README.md)). `packages/sdk build` embeds it into `packages/sdk/templates/default` for `kitbash init` ([user README](./packages/sdk/templates/default/README.md)). Edit the root fixture first; don’t hand-edit the package copy (except the init README, which is preserved). Overview: [templates/README.md](./templates/README.md). |
 | **Config file** | Scaffold includes `kitbash.config.ts`, but the compiler does not read it yet (`src/components` → `dist/` is fixed). |
 | **Agent / contrib pins** | See [`AGENTS.md`](./AGENTS.md) and [`GEMINI.md`](./GEMINI.md) for toolchain pins and architecture notes. |
 | **Roadmap scratchpad** | [`TODO.md`](./TODO.md) |
+
+---
+
+## CI & releasing to npm
+
+GitHub Actions workflows live under [`.github/workflows/`](./.github/workflows/).
+
+| Workflow | When | What |
+|----------|------|------|
+| **CI** (`ci.yml`) | Push / PR to `main` | `bun install`, Biome CI, SDK build, smoke tests (`kitbash build` + `kitbash init`) |
+| **Release** (`release.yml`) | GitHub Release **published** | Same checks, then `npm publish` for `@ktbsh/sdk` → **registry.npmjs.org** |
+
+Local equivalents:
+
+```bash
+bun run ci        # Biome (lint + format, no write)
+bun run smoke     # build SDK + compile fixture + init smoke
+bun run test      # alias for smoke
+```
+
+### One-time setup (npm token)
+
+1. On [npmjs.com](https://www.npmjs.com/) create an **Automation** access token with publish rights for `@ktbsh/sdk` (or your npm org).
+2. In the GitHub repo: **Settings → Secrets and variables → Actions → New repository secret**
+3. Name: `NPM_TOKEN`  
+   Value: the npm token  
+
+Without `NPM_TOKEN`, CI still runs; only the release publish step will fail.
+
+> **npmjs.org vs GitHub Packages:** this project already publishes **`@ktbsh/sdk` to the public npm registry**. GitHub Packages (`npm.pkg.github.com`) is a separate registry (different scope/auth, often `@OWNER/name`). The release workflow does **not** publish to GitHub Packages.
+
+### Click-to-release flow
+
+1. Bump `version` in [`packages/sdk/package.json`](./packages/sdk/package.json) (e.g. `0.1.3`).
+2. Commit and push to `main` — wait for **CI** to go green.
+3. GitHub → **Releases → Draft a new release**.
+4. Create a tag **`v0.1.3`** (leading `v` + exact `package.json` version).
+5. Publish the release.
+
+The **Release** workflow checks that the tag matches `package.json`, rebuilds, smokes, then runs `npm publish --access public`.
+
+If the tag and version disagree, the job fails on purpose so you never publish a mismatched version.
 
 ---
 
