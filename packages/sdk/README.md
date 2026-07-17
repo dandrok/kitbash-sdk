@@ -10,6 +10,9 @@ You author a single TypeScript config (`defineComponent`). The CLI evaluates it,
 
 This project is early (`0.1.x`) and intentionally experimental. The goal is a practical loop for trying design-system ideas: define → compile → drop into React, Svelte, or plain HTML. APIs and output shape will evolve as real usage teaches what matters.
 
+**Supported surface (what works / what does not):** monorepo [`docs/SUPPORTED.md`](../../docs/SUPPORTED.md).  
+**Audit / improvement notes:** monorepo [`docs/improvements/`](../../docs/improvements/).
+
 ---
 
 ## Why this exists
@@ -37,7 +40,7 @@ You get a short authoring surface; consumers get real custom elements that work 
 | **DX** | `kitbash init` scaffold, `kitbash build`, CEM for editors |
 | **Runtime deps for consumers** | Vanilla bundles bake in `uhtml` — no extra install for end apps |
 
-**Not (yet):** full Svelte wrapper codegen (use vanilla tags), config-driven `outDir`/framework toggles (see [Known limitations (0.1.x)](#known-limitations-01x)), watch mode, Storybook plugin, etc.
+**Not (yet):** full Svelte wrapper codegen (use vanilla tags), `frameworks` config toggles, built-in browser server/HMR, Storybook plugin, etc. (see [Known limitations (0.1.x)](#known-limitations-01x)).
 
 ---
 
@@ -59,7 +62,7 @@ bun add -g @ktbsh/sdk
 kitbash init my-design-system
 cd my-design-system
 bun install
-bun run build
+bun run dev     # watch + rebuild (or: bun run build once)
 ```
 
 Or without a global install:
@@ -72,7 +75,7 @@ bunx @ktbsh/sdk init my-design-system
 
 ```text
 my-design-system/
-├── kitbash.config.ts      # reserved for future config (see notes below)
+├── kitbash.config.ts      # optional: components / tokens / outDir
 ├── package.json           # "build": "kitbash build"
 └── src/
     ├── tokens.json        # design tokens → CSS variables on :host
@@ -206,11 +209,12 @@ Kitbash uses an **evaluation compiler**, not an AST rewrite of your source files
 | Concern | Behavior |
 |---------|----------|
 | Props | Reflected as attributes; `String` / `Number` / `Boolean` coercion |
-| State | Internal `_state`; updated via `setState` |
-| Re-render | `uhtml` `render()` into `shadowRoot` on prop/state changes |
-| Events | Selectors like `'click button'` or `'input input'` bind after each update |
-| Change event | `setState` dispatches bubbling/composed `kitbash-change` with `{ state, props }` |
-| Forms | If `formAssociated`, uses `ElementInternals` (`setFormValue`, basic validity for `required` / `invalid`) |
+| State | Internal `_state` |
+| Updates | `commit({ props?, state? })` — **one** re-render + **one** `kitbash-change`. `setProps` / `setState` are thin wrappers around `commit`. |
+| Re-render | `uhtml` `render()` into `shadowRoot` |
+| Events | Selectors like `'click button'` or `'input input'`; handlers receive `{ props, state, commit, setProps, setState }` |
+| Change event | User-driven `commit` / `setProps` / `setState` only (not external `el.value = …` from the parent) |
+| Forms | If `formAssociated`, `ElementInternals` + `setFormValue` on `value`; basic validity for `required` / `invalid` |
 
 ### Why uhtml v4?
 
@@ -219,6 +223,20 @@ The compiler pins **`uhtml@4.7.1`**. v5’s signal rewrite and some conditional-
 ---
 
 ## Authoring API
+
+### Hard rule: no outer closures
+
+`render` and `events` handlers are **serialized with `.toString()`** into the generated custom element. They do **not** keep a real JS closure over your module.
+
+**Snapshots, not deep clones:** `commit` / `kitbash-change` / handler `props` & `state` are **shallow** copies. Nested objects/arrays inside props remain shared references — mutate them only via `commit`, or treat them as read-only.
+
+| OK | Not OK |
+|----|--------|
+| Use `props`, `state`, `commit`, `setProps`, `setState`, `html`, DOM APIs | `import { x } from '…'` then use `x` inside `render` / `events` |
+| Inline strings, numbers, simple logic | Capture outer `const theme = …` or helpers from the same file |
+| Call methods on `e.target` | Rely on module-level variables |
+
+If you need shared helpers, either inline them or wait for a future “runtime helpers” package — do not close over imports.
 
 ```ts
 import { defineComponent, type ComponentConfig } from '@ktbsh/sdk';
@@ -234,9 +252,9 @@ export default defineComponent({
   styles?: string,             // CSS injected into constructable stylesheet
   events?: {
     // key: "eventName" or "eventName css-selector"
-    'click button'(e, { state, setState }) { /* … */ }
+    'click button'(e, { commit, setState }) { /* … */ }
   },
-  render({ props, state, setState, html }) {
+  render({ props, state, commit, setProps, setState, html }) {
     return html`…`;           // uhtml template (html tagged template)
   },
 });
@@ -248,10 +266,31 @@ export default defineComponent({
 - **Boolean:** presence of the attribute (or `true`) → `true`; missing / `"false"` → falsey handling as in the generated code.
 - **Number:** attribute strings are coerced with `Number(...)`.
 - Defaults apply when the attribute is removed.
+- **External** writes (`el.value = 'x'` or React `value={…}`) re-render but **do not** fire `kitbash-change` (the parent already knows).
 
-### State & `setState`
+### `commit` / `setProps` / `setState` (fast path)
 
-Use `state` for UI-only data (hover, open, click counts). Call `setState({ … })` from `render` handlers or `events` — that triggers re-render and fires **`kitbash-change`**.
+| API | Use for |
+|-----|---------|
+| **`commit({ props?, state? })`** | Preferred — batch props + state in **one** update and **one** `kitbash-change` |
+| **`setProps({ … })`** | Props only (wrapper around `commit`) |
+| **`setState({ … })`** | UI state only — open/hover/touched (wrapper around `commit`) |
+
+Controlled input (scaffold pattern):
+
+```ts
+events: {
+  'input input'(e, { commit }) {
+    const t = e.target as HTMLInputElement;
+    commit({
+      props: { value: t.value },
+      state: { touched: true },
+    });
+  },
+},
+```
+
+Consumers read **`e.detail.props.value`** (and `e.detail.state`) on `kitbash-change` / React `onKitbashChange`.
 
 ### Events map
 
@@ -259,13 +298,8 @@ Keys are space-separated: **`eventName`** optional **`selector`**.
 
 ```ts
 events: {
-  // host-level
-  'kitbash-change'(e, { setState }) { /* … */ },
-  // delegated inside shadow root
-  'input input'(e, { setState }) {
-    const t = e.target as HTMLInputElement;
-    // often you also write the host property for form sync:
-    // (see scaffold input.ts)
+  'input input'(e, { commit }) {
+    commit({ props: { value: (e.target as HTMLInputElement).value } });
   },
 }
 ```
@@ -313,7 +347,7 @@ my-button::part(button-root) {
 }
 ```
 
-**3. Design tokens file** — optional `src/tokens.json`:
+**3. Design tokens file** — optional (default `src/tokens.json`, overridable in config):
 
 ```json
 {
@@ -337,6 +371,11 @@ export default defineComponent({
     required: { type: Boolean, default: false },
     invalid: { type: Boolean, default: false },
   },
+  events: {
+    'input input'(e, { commit }) {
+      commit({ props: { value: (e.target as HTMLInputElement).value } });
+    },
+  },
   // …
 });
 ```
@@ -344,10 +383,10 @@ export default defineComponent({
 Generated behavior includes:
 
 - `static formAssociated = true`
-- `attachInternals()` and `setFormValue` when `value` changes
+- `attachInternals()` and `setFormValue` when `value` is assigned (via `commit` / `setProps` / property)
 - Basic `setValidity` for `required` / `invalid` props
 
-For live typing, the scaffold input also assigns `host.value` inside the `input` event so form data stays in sync — copy that pattern for real form fields.
+**SDK vs design system:** Kitbash wires platform form participation and focus delegation. Labels, error copy, live regions, and full WCAG product patterns belong in **your** design system components — not the compiler.
 
 ### React wrapper contract
 
@@ -355,9 +394,9 @@ For live typing, the scaffold input also assigns `host.value` inside the `input`
 |--------------|---------|
 | Declared props | Passed through to the custom element |
 | `children` | Light DOM → slots |
-| `onClick` | Native `click` listener on the element |
-| `onKitbashChange` | Listens for `kitbash-change` (`e.detail.state` / `e.detail.props`) |
-| `ref` | Forwarded to the host element (RefObject assumed today) |
+| `onClick` (and other native DOM handlers) | Forwarded on the host — React 19 binds them (not double-wrapped) |
+| `onKitbashChange` | Bridges custom `kitbash-change` (`e.detail.props` / `e.detail.state`) |
+| `ref` | Callback refs and `RefObject` both supported |
 
 ---
 
@@ -365,14 +404,16 @@ For live typing, the scaffold input also assigns `host.value` inside the `input`
 
 ```text
 kitbash init <project-name>   Scaffold templates/default into a new folder
-kitbash build                 Compile src/components → dist/
+kitbash build                 Compile components (config optional)
+kitbash dev                   Watch + rebuild on component/token/config changes
 kitbash                       Print help
 ```
 
 | Command | Notes |
 |---------|--------|
-| `init` | Project name must be a single path segment (no `..` / nested paths). Refuses if the directory exists. Rewrites `workspace:*` SDK deps to the published version. |
-| `build` | Always reads `src/components` and writes `dist/` under `process.cwd()`. |
+| `init` | Project name must be a single path segment (no `..` / nested paths). Refuses if the directory exists. Rewrites `workspace:*` SDK deps to the published version. Adds `build` + `dev` scripts. |
+| `build` | Loads optional `kitbash.config.ts`, compiles under `process.cwd()`. |
+| `dev` | Initial build, then watches components + tokens + config. Re-binds watchers after each build (config path changes apply). Debounced. Does **not** start a browser server (use Vite/sandbox separately). Run from the design-system package root. |
 
 Add a script in your design-system `package.json`:
 
@@ -389,9 +430,9 @@ Add a script in your design-system `package.json`:
 
 ---
 
-## Project layout conventions
+## Project layout & `kitbash.config.ts`
 
-These paths are **fixed by the compiler today** (not fully driven by `kitbash.config.ts` yet):
+Defaults (when no config file):
 
 | Path | Role |
 |------|------|
@@ -399,7 +440,23 @@ These paths are **fixed by the compiler today** (not fully driven by `kitbash.co
 | `src/tokens.json` | Optional design tokens |
 | `dist/` | Build output |
 
-`kitbash.config.ts` is scaffolded for forward compatibility (`frameworks`, `tokens`, `outDir`) but **is not read by the compiler in 0.1.x**. Changing it will not change build behavior yet.
+Optional **`kitbash.config.ts`** (or `.js`) is **loaded by `kitbash build`**:
+
+```ts
+export default {
+  components: './src/components', // relative to project root
+  tokens: './src/tokens.json',
+  outDir: './dist',
+  frameworks: ['react', 'svelte'], // reserved — 0.1.x always emits vanilla + react
+};
+```
+
+| Key | Applied? |
+|-----|----------|
+| `components` | Yes |
+| `tokens` | Yes |
+| `outDir` | Yes |
+| `frameworks` | No (logged as reserved) |
 
 ---
 
@@ -471,8 +528,8 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 
 ### React: `onKitbashChange` never fires
 
-- It only fires when **`setState`** runs inside the component (not on every attribute set from outside)
-- For controlled inputs, update host `value` in the event handler and call `setState` (see scaffold `input.ts`)
+- It only fires when **`commit` / `setProps` / `setState`** run inside the component (not when React sets `value={…}` from outside)
+- For controlled inputs use `commit({ props: { value } })` in the `input` handler (see scaffold `input.ts`), then `onKitbashChange={(e) => setVal(e.detail.props.value)}`
 
 ### React types / JSX unknown tag
 
@@ -482,11 +539,12 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 ### Styles don’t apply from the parent page
 
 - Shadow DOM encapsulates plain element selectors — use **CSS variables** or **`::part(...)`**
-- Tokens only apply if `src/tokens.json` exists and parses as JSON at build time
+- Tokens only apply if the tokens file exists and parses as JSON at build time (default path or `tokens` in config)
 
-### `tokens.json` ignored
+### Tokens ignored
 
-- Path must be exactly `src/tokens.json` relative to the project you build
+- Default path is `src/tokens.json` unless `kitbash.config.ts` sets `tokens`
+- Missing file → no token CSS (warning if you set a custom `tokens` path)
 - Invalid JSON logs a warning and continues without tokens
 
 ### Init: “Directory already exists” / invalid name
@@ -504,14 +562,13 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 
 Be aware of these before relying on Kitbash in production:
 
-1. **`kitbash.config.ts` is not wired up** — paths and targets are hardcoded.
-2. **No dedicated Svelte/Vue wrappers** — use vanilla custom elements.
-3. **React `ref` merging is simplified** — callback refs are not fully merged.
-4. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
-5. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
-6. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface.
-7. **Function serialization** — `render` / `events` are `.toString()`’d into the output. Closures over imports or outer locals will **not** work; keep handlers self-contained or use only `props` / `state` / `setState` / DOM APIs.
-8. **Bun-only toolchain** — Node is not a supported host for the CLI today.
+1. **`frameworks` in config is reserved** — vanilla + react always emitted; no Svelte/Vue wrappers yet (use vanilla CE).
+2. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
+3. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
+4. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface. Product a11y (labels, announcements) is design-system work.
+5. **Function serialization** — hard rule above; no real closures over module scope.
+6. **Bun-only toolchain** — Node is not a supported host for the CLI today.
+7. **`kitbash dev` is compile-only** — no built-in Vite/HMR server (pair with your app’s dev server; monorepo sandbox still uses `bun run dev`).
 
 ---
 
@@ -521,18 +578,19 @@ Contributions and experiments welcome. High-value directions:
 
 | Idea | Why |
 |------|-----|
-| **Watch mode** (`kitbash dev`) | Faster authoring loop with rebuild on save |
-| **Honor `kitbash.config.ts`** | Custom `outDir`, token path, framework targets |
+| **Dev server integration** | Optional Vite plugin / HMR for `kitbash dev` |
+| **`frameworks` toggles in config** | Opt out of react emit / future targets |
 | **Svelte / Vue wrapper codegen** | First-class DX beyond vanilla tags |
 | **Richer CEM** | Events, slots, CSS parts/properties for docs tools |
 | **Stable public runtime helpers** | Shared utilities without relying on serialized closures |
-| **Controlled/uncontrolled input recipe** | Documented + tested pattern for React forms |
 | **CSS / token pipeline** | Themes, dark mode maps, reference to CSS files |
 | **Source maps & better errors** | Map compile failures back to authoring files |
 | **Node-compatible CLI build** | Wider install story if Bun-only is a blocker |
-| **Unit tests around compiler output** | Snapshot vanilla/React emit for regressions |
+| **Broader compiler snapshots** | Expand beyond form/change + runtime contract tests |
 | **`exports` map in scaffold** | Publish-ready package.json from `init` |
 | **Strip or gitignore `*.src.js`** | Cleaner publish artifacts |
+
+**Done recently:** controlled input via `commit` + React bridge + event detail snapshots + contract tests (see changelog / recent commits).
 
 If you try Kitbash on a real system, issues and “this surprised me” notes are especially useful — early APIs should bend toward real workflows.
 
@@ -571,4 +629,5 @@ MIT
 ## Links
 
 - npm: [`@ktbsh/sdk`](https://www.npmjs.com/package/@ktbsh/sdk)
-- Repository: [github.com/kitbash/sdk](https://github.com/kitbash/sdk)
+- Repository: [github.com/dandrok/kitbash-sdk](https://github.com/dandrok/kitbash-sdk)
+- SDK package path: [packages/sdk](https://github.com/dandrok/kitbash-sdk/tree/main/packages/sdk)

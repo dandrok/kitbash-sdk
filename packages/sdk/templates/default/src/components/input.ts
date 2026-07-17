@@ -42,19 +42,13 @@ export default defineComponent({
     }
   `,
   events: {
-    'input input'(e: Event, { setState }) {
+    // One commit → one re-render → one kitbash-change with fresh props.value
+    'input input'(e: Event, { commit }) {
       const target = e.target as HTMLInputElement;
-      const host = (target.getRootNode() as ShadowRoot).host as Element & {
-        value: string;
-        _internals?: ElementInternals;
-      };
-
-      host.value = target.value;
-      if (host._internals) {
-        host._internals.setFormValue(target.value);
-      }
-
-      setState({ touched: true });
+      commit({
+        props: { value: target.value },
+        state: { touched: true },
+      });
     },
   },
   render({ props, state, html }) {

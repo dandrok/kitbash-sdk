@@ -1,7 +1,20 @@
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { basename, resolve as pathResolve } from 'node:path';
+import { basename, isAbsolute, resolve as pathResolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { ComponentConfig } from './index.js';
+
+/** Resolve option path: absolute stays absolute; relative is against projectDir. */
+function resolveProjectPath(
+  projectDir: string,
+  pathOrUndef: string | undefined,
+  fallbackRelative: string,
+): string {
+  if (!pathOrUndef) return pathResolve(projectDir, fallbackRelative);
+  return isAbsolute(pathOrUndef)
+    ? pathOrUndef
+    : pathResolve(projectDir, pathOrUndef);
+}
 
 const uhtmlPath = Bun.resolveSync('uhtml', import.meta.dir);
 
@@ -73,6 +86,13 @@ function generateVanillaComponent(
     ),
   );
 
+  const formValueSync = config.formAssociated
+    ? `
+    if (key === 'value' && this._internals) {
+      this._internals.setFormValue(next == null ? null : String(next));
+    }`
+    : '';
+
   return `
 import { render, html } from 'uhtml';
 
@@ -96,18 +116,9 @@ ${propsArray
     return this._props['${prop}'];
   }
   set ${prop}(val) {
-    const type = this.constructor.propTypes['${prop}'];
-    const isTrue = type === 'Boolean' ? (val === true || val === '') : false;
-    this._props['${prop}'] = type === 'Boolean' ? isTrue : val;
-    
-    if (type === 'Boolean') {
-      if (isTrue) this.setAttribute('${prop}', '');
-      else this.removeAttribute('${prop}');
-    } else {
-      if (val === null || val === undefined) this.removeAttribute('${prop}');
-      else this.setAttribute('${prop}', val);
-    }
-    ${config.formAssociated && prop === 'value' ? 'if (this._internals) this._internals.setFormValue(val);' : ''}
+    // External / framework property writes: re-render, do not emit kitbash-change
+    // (caller already knows the value they set).
+    this._assignProp('${prop}', val);
     this.update();
   }
 `,
@@ -134,12 +145,13 @@ ${propsArray
     this._eventHandlers = ${eventsObjStr};
     this._eventCleanup = [];
     this._renderFn = ${renderFnStr};
+    this._reflecting = false;
   }
 
   connectedCallback() {
     // Initial attribute values are parsed by attributeChangedCallback before connectedCallback fires
     this.update();
-    ${config.formAssociated ? `if (this.value !== undefined) this._internals.setFormValue(this.value);` : ''}
+    ${config.formAssociated ? `if (this.value !== undefined) this._internals.setFormValue(this.value == null ? null : String(this.value));` : ''}
   }
 
   disconnectedCallback() {
@@ -147,32 +159,115 @@ ${propsArray
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
-    if (oldValue !== newValue) {
-      const type = this.constructor.propTypes[name];
-      
-      let parsedValue = newValue;
-      if (newValue === null || newValue === undefined) {
-        parsedValue = this._defaults[name];
-      } else if (type === 'Number') {
-        parsedValue = Number(newValue);
-      } else if (type === 'Boolean') {
-        parsedValue = newValue !== null && newValue !== 'false';
-      }
-      
-      this._props[name] = parsedValue;
-      this.update();
+    // Skip when we caused the attribute write ourselves (avoids double update)
+    if (this._reflecting) return;
+    if (oldValue === newValue) return;
+
+    const type = this.constructor.propTypes[name];
+    
+    let parsedValue = newValue;
+    if (newValue === null || newValue === undefined) {
+      parsedValue = this._defaults[name];
+    } else if (type === 'Number' && newValue !== '') {
+      // Match property coercion: empty string is not Number('') → 0
+      parsedValue = Number(newValue);
+    } else if (type === 'Boolean') {
+      parsedValue = newValue !== null && newValue !== 'false';
     }
+    
+    this._props[name] = parsedValue;
+    ${config.formAssociated ? `if (name === 'value' && this._internals) this._internals.setFormValue(parsedValue == null ? null : String(parsedValue));` : ''}
+    this.update();
   }
 
-  setState(newState) {
-    this._state = { ...this._state, ...newState };
-    this.update();
-    
+  /** Coerce + reflect a single prop; no re-render (caller decides). */
+  _assignProp(key, val) {
+    const type = this.constructor.propTypes[key];
+    let next = val;
+    if (type === 'Boolean') {
+      next = val === true || val === '';
+    } else if (type === 'Number' && val !== null && val !== undefined && val !== '') {
+      next = Number(val);
+    }
+    this._props[key] = next;
+
+    // Only reflect primitives — objects/arrays stay as properties (no [object Object] attrs)
+    const isPrimitive =
+      next === null ||
+      next === undefined ||
+      typeof next === 'string' ||
+      typeof next === 'number' ||
+      typeof next === 'boolean';
+
+    this._reflecting = true;
+    try {
+      if (type === 'Boolean') {
+        if (next) this.setAttribute(key, '');
+        else this.removeAttribute(key);
+      } else if (!isPrimitive) {
+        // property-only; drop stale attribute if any
+        this.removeAttribute(key);
+      } else if (next === null || next === undefined) {
+        this.removeAttribute(key);
+      } else {
+        this.setAttribute(key, String(next));
+      }
+    } finally {
+      this._reflecting = false;
+    }
+    ${formValueSync}
+  }
+
+  _emitChange() {
+    // Shallow-copy both bags so listeners cannot mutate internal state/props via event.detail
     this.dispatchEvent(new CustomEvent('kitbash-change', {
-      detail: { state: this._state, props: this._props },
+      detail: {
+        state: { ...this._state },
+        props: { ...this._props },
+      },
       bubbles: true,
       composed: true
     }));
+  }
+
+  /**
+   * Batch props and/or state: one uhtml update, one kitbash-change.
+   * Prefer this in event handlers (e.g. controlled inputs).
+   */
+  commit(patch) {
+    const p = patch || {};
+    if (p.props) {
+      const allowed = this.constructor.propTypes || {};
+      for (const key of Object.keys(p.props)) {
+        // Only declared props — ignore typos / stray keys
+        if (!Object.prototype.hasOwnProperty.call(allowed, key)) continue;
+        this._assignProp(key, p.props[key]);
+      }
+    }
+    if (p.state) {
+      this._state = { ...this._state, ...p.state };
+    }
+    this.update();
+    this._emitChange();
+  }
+
+  setState(newState) {
+    this.commit({ state: newState });
+  }
+
+  setProps(nextProps) {
+    this.commit({ props: nextProps });
+  }
+
+  _handlerCtx() {
+    // Snapshots so handlers/render cannot mutate internal bags by accident
+    return {
+      props: { ...this._props },
+      state: { ...this._state },
+      setState: this.setState.bind(this),
+      setProps: this.setProps.bind(this),
+      commit: this.commit.bind(this),
+    };
   }
   
   cleanupEvents() {
@@ -183,9 +278,7 @@ ${propsArray
   update() {
     // Run the uhtml DOM diffing render cycle
     render(this.shadowRoot, this._renderFn({ 
-      props: this._props, 
-      state: this._state, 
-      setState: this.setState.bind(this),
+      ...this._handlerCtx(),
       html 
     }));
     this.cleanupEvents();
@@ -225,10 +318,7 @@ ${
       const targets = selector ? this.shadowRoot.querySelectorAll(selector) : [this];
       targets.forEach(target => {
         const handler = (e) => {
-          this._eventHandlers[eventSelector](e, { 
-            state: this._state, 
-            setState: this.setState.bind(this) 
-          });
+          this._eventHandlers[eventSelector](e, this._handlerCtx());
         };
         target.addEventListener(eventName, handler);
         this._eventCleanup.push(() => target.removeEventListener(eventName, handler));
@@ -250,35 +340,31 @@ function generateReactWrapper(config: ComponentConfig, componentName: string) {
 import * as React from 'react';
 import '../vanilla/${componentName}.js';
 
-export const ${pascalName} = React.forwardRef(({ children, onClick, onKitbashChange, ...props }, ref) => {
-  const localRef = React.useRef(null);
-  const combinedRef = ref || localRef;
+export const ${pascalName} = React.forwardRef(({ children, onKitbashChange, ...props }, ref) => {
+  const innerRef = React.useRef(null);
 
+  // kitbash-change is a CustomEvent — bridge manually. Native events (onClick, etc.)
+  // stay on ...props so React 19 binds them once (no double-fire).
   React.useEffect(() => {
-    // In React 19, if a ref is passed as a function, combinedRef won't have .current.
-    // For simplicity in this compiler output, we assume combinedRef is a RefObject.
-    // A robust version would use useImperativeHandle or merge refs.
-    const el = typeof combinedRef === 'function' ? null : combinedRef.current;
-    if (!el) return;
+    const el = innerRef.current;
+    if (!el || !onKitbashChange) return;
 
-    const handleCustomChange = (e) => {
-      if (onKitbashChange) onKitbashChange(e);
-    };
-
-    const handleNativeClick = (e) => {
-      if (onClick) onClick(e);
-    };
-
+    const handleCustomChange = (e) => onKitbashChange(e);
     el.addEventListener('kitbash-change', handleCustomChange);
-    el.addEventListener('click', handleNativeClick);
+    return () => el.removeEventListener('kitbash-change', handleCustomChange);
+  }, [onKitbashChange]);
 
-    return () => {
-      el.removeEventListener('kitbash-change', handleCustomChange);
-      el.removeEventListener('click', handleNativeClick);
-    };
-  }, [onClick, onKitbashChange, combinedRef]);
+  // Callback ref: assign + clear on unmount / ref change (object + function refs).
+  const setRefs = React.useCallback((node) => {
+    innerRef.current = node;
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref && typeof ref === 'object') {
+      ref.current = node;
+    }
+  }, [ref]);
 
-  return React.createElement('${config.tag}', { ref: combinedRef, ...props }, children);
+  return React.createElement('${config.tag}', { ref: setRefs, ...props }, children);
 });
 `;
 
@@ -298,7 +384,7 @@ import * as React from 'react';
 
 export interface ${pascalName}Props extends React.HTMLAttributes<HTMLElement> {
   ${propsInterfaces.join('\n  ')}
-  onKitbashChange?: (event: CustomEvent<any>) => void;
+  onKitbashChange?: (event: CustomEvent<{ props: Record<string, unknown>; state: Record<string, unknown> }>) => void;
 }
 
 declare global {
@@ -315,8 +401,25 @@ export declare const ${pascalName}: React.ForwardRefExoticComponent<${pascalName
   return { code, types };
 }
 
-export async function compileComponents(projectDir: string, outDir: string) {
-  const componentsDir = pathResolve(projectDir, 'src/components');
+export type CompileOptions = {
+  /** Absolute or projectDir-relative components directory */
+  componentsDir?: string;
+  /** Absolute or projectDir-relative tokens JSON path */
+  tokensFile?: string;
+  /** When true, warn if tokensFile does not exist (custom config path). */
+  warnIfTokensMissing?: boolean;
+};
+
+export async function compileComponents(
+  projectDir: string,
+  outDir: string,
+  options: CompileOptions = {},
+) {
+  const componentsDir = resolveProjectPath(
+    projectDir,
+    options.componentsDir,
+    'src/components',
+  );
   let files: string[];
   try {
     files = await readdir(componentsDir);
@@ -326,17 +429,24 @@ export async function compileComponents(projectDir: string, outDir: string) {
   }
 
   let tokensCss = '';
-  const tokensFile = pathResolve(projectDir, 'src/tokens.json');
+  const tokensFile = resolveProjectPath(
+    projectDir,
+    options.tokensFile,
+    'src/tokens.json',
+  );
   if (existsSync(tokensFile)) {
     try {
       const tokensContent = await Bun.file(tokensFile).text();
       const tokens = JSON.parse(tokensContent);
       tokensCss = `:host {\n${generateTokenStyles(tokens)}}\n`;
-      console.log('🎨 Loaded design tokens from tokens.json');
+      console.log(`🎨 Loaded design tokens from ${tokensFile}`);
     } catch (err) {
-      console.warn('⚠️ Failed to parse tokens.json:', err);
+      console.warn('⚠️ Failed to parse tokens file:', err);
     }
+  } else if (options.warnIfTokensMissing) {
+    console.warn(`⚠️ Tokens file not found (configured path): ${tokensFile}`);
   }
+  // Default tokens path missing → silent skip (optional by design).
 
   const cemModules = [];
 
@@ -344,7 +454,10 @@ export async function compileComponents(projectDir: string, outDir: string) {
     if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
 
     const filePath = pathResolve(componentsDir, file);
-    const module = await import(filePath);
+    // file URL + cache-bust so `kitbash dev` picks up edits (ESM caches bare paths)
+    const module = await import(
+      `${pathToFileURL(filePath).href}?t=${Date.now()}`
+    );
     const config: ComponentConfig = module.default;
 
     if (!config?.tag) {
@@ -382,6 +495,9 @@ export async function compileComponents(projectDir: string, outDir: string) {
       console.error(result.logs);
       throw new Error(`Build failed for ${componentName}`);
     }
+
+    // Note: *.src.js intermediate remains next to the bundle (handy for debug/tests).
+    // Stripping on publish is a future packaging step.
 
     // React 19 Target
     const { code: reactCode, types: reactTypes } = generateReactWrapper(

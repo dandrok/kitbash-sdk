@@ -5,6 +5,7 @@ Small monorepo for **Kitbash** — a compiler-driven toolkit that turns a single
 Early project (`0.1.x`). The idea is simple: define components once, compile them, and try them in plain HTML, React, or Svelte while the API is still free to evolve.
 
 **Using the published package?** Start here → [`packages/sdk/README.md`](./packages/sdk/README.md)  
+**Supported surface / non-goals:** [`docs/SUPPORTED.md`](./docs/SUPPORTED.md)  
 **npm:** [`@ktbsh/sdk`](https://www.npmjs.com/package/@ktbsh/sdk)
 
 ---
@@ -144,13 +145,10 @@ export default defineComponent({
     }
   `,
   events: {
-    'input input'(e: Event, { setState }) {
+    // one commit → one re-render → kitbash-change with fresh props.value
+    'input input'(e: Event, { commit }) {
       const target = e.target as HTMLInputElement;
-      const host = (target.getRootNode() as ShadowRoot).host as HTMLElement & {
-        value: string;
-      };
-      host.value = target.value;
-      setState({ value: target.value });
+      commit({ props: { value: target.value } });
     },
   },
   render({ props, html }) {
