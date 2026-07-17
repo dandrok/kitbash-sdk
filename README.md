@@ -1,74 +1,128 @@
-# Kitbash SDK: Enterprise Design System Engine
+# Kitbash
 
-Welcome to the **Kitbash SDK**—an enterprise-grade, compiler-driven Design System Engine. Kitbash strictly separates the Authoring Experience (AX) from the compiled Runtime Output. Developers write a single, declarative component definition in TypeScript, and the SDK evaluates the configuration in memory, compiling it into highly optimized, native Vanilla Web Components and zero-dependency wrappers for modern frameworks.
+Small monorepo for **Kitbash** — a compiler-driven toolkit that turns a single TypeScript component definition into native Web Components (plus React wrappers).
 
-## 1. High-Level System Overview & Tech Stack
+Early project (`0.1.x`). The idea is simple: define components once, compile them, and try them in plain HTML, React, or Svelte while the API is still free to evolve.
 
-Kitbash is designed to run on the bleeding edge of the web, guaranteeing a robust, zero-friction developer experience across our host environments:
-- **Vite 8:** The latest stable build tool for lightning-fast HMR and optimized production bundling.
-- **React 19 (Stable):** Native JSX wrapper generation seamlessly syncing React state to custom elements.
-- **Svelte 5 (Stable):** Seamless Vanilla import support running entirely on Svelte's latest rune architecture.
+**Using the published package?** Start here → [`packages/sdk/README.md`](./packages/sdk/README.md)  
+**npm:** [`@ktbsh/sdk`](https://www.npmjs.com/package/@ktbsh/sdk)
 
-### The uhtml v4 Architectural Pin
-Our core compiler is intentionally powered by **`uhtml@4.7.1`**. We deliberately bypass the unoptimized signal-rewrite and conditional array rendering issues present in `uhtml` v5. By locking onto the v4 line, Kitbash achieves raw performance, absolute rendering predictability, and battle-tested DOM-diffing stability natively inside the Shadow DOM without sacrificing syntax ergonomics.
+---
 
-## Installation
+## What this repo is
 
-Kitbash is engineered exclusively for Bun. Install the SDK using Bun's native package manager:
+| Path | Role |
+|------|------|
+| [`packages/sdk`](./packages/sdk) | The publishable SDK: `defineComponent`, compiler, `kitbash` CLI, init templates — [README](./packages/sdk/README.md) |
+| [`templates/default`](./templates/default) | Local workspace design-system fixture used by the sandbox and `bun run dev` — [README](./templates/default/README.md) |
+| [`sandbox`](./sandbox) | Vite playground — React 19, Svelte 5, and Vanilla side by side — [README](./sandbox/README.md) |
+| [`scripts`](./scripts) | Dev watcher (`dev.ts`) and pre-commit helper |
 
-```bash
-bun add @ktbsh/sdk
-# or globally for CLI usage
-bun add -g @ktbsh/sdk
-```
-
-## 2. Dynamic Architecture Diagram & Flow
+Bun workspaces wire these together (`packages/*`, `templates/*`, `sandbox`).
 
 ```text
-┌───────────────────────────────┐
-│  ComponentConfig (input.ts)   │
-│  (Single Source of Truth)     │
-└──────────────┬────────────────┘
-               │
-    [ SDK Compiler Engine ]
-               │
-       ┌───────┴───────┐
-       ▼               ▼
-┌──────────────┐ ┌──────────────┐
-│ Vanilla WCs  │ │ React 19     │
-│ (Shadow DOM) │ │ Wrappers     │
-│ (uhtml diff) │ │ (JSX Types)  │
-└──────────────┘ └──────────────┘
+kitbash-sdk/
+├── packages/sdk/          # @ktbsh/sdk (npm)
+│   ├── src/               # defineComponent, compiler, CLI
+│   └── templates/default/ # copied by `kitbash init`
+├── templates/default/     # in-repo sample design system + dist/
+├── sandbox/               # multi-framework playground
+├── scripts/dev.ts         # watch components + Vite
+└── packages/sdk/README.md # full consumer docs
 ```
 
-A single, framework-agnostic component definition compiles down to both:
-- **Vanilla Custom Elements:** Fully encapsulated with Shadow DOM, leveraging constructable stylesheets (`adoptedStyleSheets`), and lazy, granular state updates via `uhtml`.
-- **React 19 Wrappers:** Fully typed, utilizing native JSX element creation, direct slot forwarding, and proxy ref/event binding to pierce the React synthetic event system safely.
+The **authoring → compile → consume** flow:
 
-## 3. Core Feature Documentation (How It Works)
+```text
+  defineComponent({ … })     # src/components/*.ts
+            │
+            ▼
+     kitbash build
+            │
+     ┌──────┴──────┐
+     ▼             ▼
+  vanilla CE    React wrappers
+  (Shadow DOM,  (typed JSX +
+   uhtml)        kitbash-change)
+            │
+            ▼
+     custom-elements.json
+```
 
-### Dynamic Slots (Composition)
-Kitbash supports seamless composition. The generated vanilla template natively parses and supports standard HTML `<slot>` elements inside our Shadow DOM. When consuming the React wrapper, React's native `children` prop is automatically mapped directly into the underlying web component tag as Light DOM nodes, allowing the browser to project them effortlessly into the targeted slots.
+---
 
-### Theming API (Shadow Parts & CSS Variables)
-Our engine provides robust styling hooks that safely pierce Shadow DOM encapsulation:
-- **Shadow Parts:** Interactive elements declare a `part` attribute (e.g., `part="button-root"`). Consumers can externally target and style these elements via CSS using `my-button::part(button-root)`.
-- **Theme Variables:** We establish a clean token API by declaring custom CSS properties inside the `:host` scope (e.g., `--kitbash-btn-bg`). Consumers simply override these variables globally to theme the entire design system instantly.
+## Requirements
 
-### Form Participation & Focus Delegation
-Kitbash is engineered for Enterprise Accessibility (WCAG 2.2).
-By simply defining `formAssociated: true` in your config, the compiler automatically injects `static formAssociated = true` and binds the native `ElementInternals` API. This allows your custom inputs to seamlessly participate in standard HTML `<form>` submissions and validations. Setting `delegatesFocus: true` ensures that any click on the component automatically proxies focus to the inner `<input>`, guaranteeing native accessibility behaviors out of the box.
+- [Bun](https://bun.sh) ≥ 1.0  
+- For the playground: Vite 8, React 19, Svelte 5 (installed via workspace)
 
-### IDE Autocomplete (CEM)
-To deliver a world-class developer experience, the SDK compiler automatically harvests all metadata during the build loop—extracting tags, property types, and default values—to generate a standard W3C Custom Elements Manifest (`custom-elements.json`). IDEs like VS Code and WebStorm instantly parse this manifest, providing developers with zero-config hover documentation and autocompletion for all Kitbash components.
+The SDK CLI is built for Bun. Prefer `bun` / `bunx` over Node’s `npx`.
 
-## 4. Code Examples: Before and After
+---
 
-### The Authoring Experience (Before)
+## Use the SDK (published)
 
-*Defining a component once using `defineComponent`:*
+```bash
+bun add -g @ktbsh/sdk
+kitbash init my-design-system
+cd my-design-system
+bun install
+bun run build
+```
 
-```typescript
+Or without a global install:
+
+```bash
+bunx @ktbsh/sdk init my-design-system
+```
+
+Full API, theming, forms, packaging, and troubleshooting: **[packages/sdk/README.md](./packages/sdk/README.md)**.
+
+---
+
+## Develop this monorepo
+
+```bash
+bun install
+```
+
+### Build the SDK package
+
+```bash
+cd packages/sdk
+bun run build
+# → dist/cli.js (bin: kitbash)
+```
+
+### Sample components + playground
+
+`bun run dev` (repo root) will:
+
+1. Compile `templates/default/src/components` → `templates/default/dist`
+2. Watch those sources and rebuild on change
+3. Start the sandbox Vite server (typically `http://localhost:3000`)
+
+```bash
+bun run dev
+```
+
+Open the sandbox index to jump between React, Svelte, and Vanilla demos. They import compiled output from `templates/default/dist`.
+
+### Lint / format
+
+```bash
+bun run format   # Biome format
+bun run lint     # Biome lint
+bun run check    # Biome check --write
+```
+
+---
+
+## Authoring snapshot
+
+One file, one default export:
+
+```ts
 import { defineComponent } from '@ktbsh/sdk';
 
 export default defineComponent({
@@ -93,7 +147,7 @@ export default defineComponent({
     'input input'(e: Event, { setState }) {
       const target = e.target as HTMLInputElement;
       setState({ value: target.value });
-    }
+    },
   },
   render({ props, html }) {
     return html`
@@ -104,13 +158,11 @@ export default defineComponent({
         placeholder=${props.placeholder}
       />
     `;
-  }
+  },
 });
 ```
 
-### The Runtime Experience (After)
-
-*Consuming the compiled component in **React 19**:*
+**React consumer** (after build):
 
 ```tsx
 import { useState } from 'react';
@@ -118,22 +170,19 @@ import { KitbashInput } from 'my-design-system/react/input.js';
 
 export function App() {
   const [val, setVal] = useState('');
-  
+
   return (
-    <form onSubmit={() => alert(val)}>
-      <KitbashInput 
-        name="username" 
-        value={val} 
-        onKitbashChange={(e) => setVal(e.detail.props.value)} 
-        placeholder="Enter username" 
-      />
-      <button type="submit">Submit</button>
-    </form>
+    <KitbashInput
+      name="username"
+      value={val}
+      onKitbashChange={(e) => setVal(e.detail.props.value)}
+      placeholder="Enter username"
+    />
   );
 }
 ```
 
-*Consuming the compiled component in **Svelte 5**:*
+**Svelte 5** uses the vanilla custom element directly:
 
 ```svelte
 <script lang="ts">
@@ -141,13 +190,40 @@ export function App() {
   let val = $state('');
 </script>
 
-<form onsubmit={(e) => alert(val)}>
-  <kitbash-input 
-    name="username" 
-    value={val} 
-    onkitbash-change={(e) => val = e.detail.props.value}
-    placeholder="Enter username">
-  </kitbash-input>
-  <button type="submit">Submit</button>
-</form>
+<kitbash-input
+  value={val}
+  onkitbash-change={(e) => (val = e.detail.props.value)}
+  placeholder="Enter username"
+></kitbash-input>
 ```
+
+### Capabilities (short)
+
+- **Slots** — standard `<slot>` in Shadow DOM; React `children` → light DOM  
+- **Theming** — CSS variables on `:host`, `::part(...)`, optional `src/tokens.json`  
+- **Forms** — `formAssociated` + `ElementInternals`, optional `delegatesFocus`  
+- **CEM** — `dist/custom-elements.json` for editor autocomplete  
+- **uhtml v4.7.1** — pinned for stable Shadow DOM updates (do not casually bump to v5)
+
+Details and caveats live in the [SDK README](./packages/sdk/README.md).
+
+---
+
+## Workspace notes
+
+| Topic | Detail |
+|-------|--------|
+| **Two “default” templates** | `packages/sdk/templates/default` is what `kitbash init` copies for users ([README](./packages/sdk/templates/default/README.md)). `templates/default` is the monorepo fixture ([README](./templates/default/README.md)). Overview: [templates/README.md](./templates/README.md). Keep example components roughly in sync when you change scaffolds. |
+| **Config file** | Scaffold includes `kitbash.config.ts`, but the compiler does not read it yet (`src/components` → `dist/` is fixed). |
+| **Agent / contrib pins** | See [`AGENTS.md`](./AGENTS.md) and [`GEMINI.md`](./GEMINI.md) for toolchain pins and architecture notes. |
+| **Roadmap scratchpad** | [`TODO.md`](./TODO.md) |
+
+---
+
+## Status
+
+Experimental personal project. Expect breaking changes in `0.1.x` while the compiler and authoring API settle. Feedback from real design-system experiments is welcome.
+
+## License
+
+MIT (see package metadata under `packages/sdk`).
