@@ -1,14 +1,34 @@
 #!/usr/bin/env bun
-import { existsSync } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import { cp } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
+function printHelp() {
+  console.log(`
+@ktbsh/sdk CLI
+
+Commands:
+  init <project-name>   Scaffold a new design system
+  build                 Compile components (kitbash.config.ts optional)
+  dev                   Watch components/tokens/config and rebuild
+  `);
+}
+
 async function main() {
-  const { positionals } = parseArgs({
+  const { positionals, values } = parseArgs({
     args: Bun.argv.slice(2),
     allowPositionals: true,
+    strict: false,
+    options: {
+      help: { type: 'boolean', short: 'h' },
+    },
   });
+
+  if (values.help) {
+    printHelp();
+    return;
+  }
 
   const command = positionals[0];
 
@@ -25,7 +45,9 @@ async function main() {
     if (
       cleanName !== projectName ||
       projectName === '..' ||
-      projectName === '.'
+      projectName === '.' ||
+      projectName.includes('/') ||
+      projectName.includes('\\')
     ) {
       console.error(
         '❌ Error: Invalid project name. Directory traversal is not allowed.',
@@ -84,6 +106,12 @@ async function main() {
         if (targetPkg.devDependencies?.['@ktbsh/sdk'] === 'workspace:*') {
           targetPkg.devDependencies['@ktbsh/sdk'] = sdkVersion;
         }
+        // Prefer watch-friendly script for new scaffolds
+        targetPkg.scripts = {
+          ...targetPkg.scripts,
+          build: 'kitbash build',
+          dev: 'kitbash dev',
+        };
         await Bun.write(
           scaffoldedPkgPath,
           `${JSON.stringify(targetPkg, null, 2)}\n`,
@@ -94,7 +122,8 @@ async function main() {
       console.log(`\nNext steps:`);
       console.log(`  cd ${projectName}`);
       console.log(`  bun install`);
-      console.log(`  bun run build`);
+      console.log(`  bun run dev`);
+      console.log(`  # or: bun run build`);
       console.log(`\nReady for development.\n`);
     } catch (err) {
       console.error(`❌ Failed to copy template files:`, err);
@@ -105,29 +134,89 @@ async function main() {
     const projectDir = process.cwd();
 
     try {
-      const { loadProjectConfig } = await import('./config.js');
-      const { compileComponents } = await import('./compiler.js');
-      const cfg = await loadProjectConfig(projectDir);
-      if (cfg.source !== 'defaults') {
-        console.log(`📄 Using config from ${cfg.source}`);
-      }
-      await compileComponents(projectDir, cfg.outDir, {
-        componentsDir: cfg.componentsDir,
-        tokensFile: cfg.tokensFile,
-      });
+      const { runProjectBuild } = await import('./build-project.js');
+      const cfg = await runProjectBuild(projectDir);
       console.log(`\n✅ Build successful! Outputs written to ${cfg.outDir}/\n`);
     } catch (err) {
       console.error(`❌ Build failed:`, err);
       process.exit(1);
     }
-  } else {
-    console.log(`
-@ktbsh/sdk CLI
+  } else if (command === 'dev') {
+    const projectDir = process.cwd();
+    const { runProjectBuild } = await import('./build-project.js');
+    const { loadProjectConfig } = await import('./config.js');
 
-Commands:
-  init <project-name>   Scaffold a new design system
-  build                 Compile components (kitbash.config.ts optional)
-    `);
+    let building = false;
+    let queued = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const rebuild = async (reason: string) => {
+      if (building) {
+        queued = true;
+        return;
+      }
+      building = true;
+      try {
+        console.log(`\n🔄 Rebuild (${reason})…\n`);
+        const cfg = await runProjectBuild(projectDir);
+        console.log(`✅ Build ok → ${cfg.outDir}/\n`);
+      } catch (err) {
+        console.error(`❌ Build failed:`, err);
+      } finally {
+        building = false;
+        if (queued) {
+          queued = false;
+          // Re-enter through debounce so bursts still coalesce
+          schedule('queued');
+        }
+      }
+    };
+
+    const schedule = (reason: string) => {
+      if (timer) clearTimeout(timer);
+      // Light debounce: coalesce bursty editor saves
+      timer = setTimeout(() => {
+        void rebuild(reason);
+      }, 80);
+    };
+
+    console.log(`\n👀 kitbash dev — watching project at ${projectDir}\n`);
+    await rebuild('initial');
+
+    const cfg = await loadProjectConfig(projectDir);
+
+    // Watch only sources — never outDir (would infinite-loop on emit).
+    const watchFile = (path: string, label: string) => {
+      if (!existsSync(path)) return;
+      try {
+        watch(path, () => schedule(label));
+      } catch (err) {
+        console.warn(`⚠️ Could not watch ${path}:`, err);
+      }
+    };
+
+    if (existsSync(cfg.componentsDir)) {
+      try {
+        watch(cfg.componentsDir, { recursive: true }, (event, filename) => {
+          const name = filename?.toString() ?? '';
+          if (name.endsWith('.ts') || name.endsWith('.js')) {
+            schedule(`${event} ${name}`);
+          }
+        });
+      } catch (err) {
+        console.warn(`⚠️ Could not watch ${cfg.componentsDir}:`, err);
+      }
+    }
+
+    watchFile(cfg.tokensFile, `tokens ${basename(cfg.tokensFile)}`);
+    watchFile(resolve(projectDir, 'kitbash.config.ts'), 'kitbash.config.ts');
+    watchFile(resolve(projectDir, 'kitbash.config.js'), 'kitbash.config.js');
+
+    console.log('Watching components, tokens, and config (Ctrl+C to stop)…\n');
+    // Keep process alive
+    await new Promise(() => {});
+  } else {
+    printHelp();
   }
 }
 

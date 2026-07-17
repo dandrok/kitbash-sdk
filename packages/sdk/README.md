@@ -62,7 +62,7 @@ bun add -g @ktbsh/sdk
 kitbash init my-design-system
 cd my-design-system
 bun install
-bun run build
+bun run dev     # watch + rebuild (or: bun run build once)
 ```
 
 Or without a global install:
@@ -402,14 +402,16 @@ Generated behavior includes:
 
 ```text
 kitbash init <project-name>   Scaffold templates/default into a new folder
-kitbash build                 Compile src/components → dist/
+kitbash build                 Compile components (config optional)
+kitbash dev                   Watch + rebuild on component/token/config changes
 kitbash                       Print help
 ```
 
 | Command | Notes |
 |---------|--------|
-| `init` | Project name must be a single path segment (no `..` / nested paths). Refuses if the directory exists. Rewrites `workspace:*` SDK deps to the published version. |
-| `build` | Always reads `src/components` and writes `dist/` under `process.cwd()`. |
+| `init` | Project name must be a single path segment (no `..` / nested paths). Refuses if the directory exists. Rewrites `workspace:*` SDK deps to the published version. Adds `build` + `dev` scripts. |
+| `build` | Loads optional `kitbash.config.ts`, compiles under `process.cwd()`. |
+| `dev` | Initial build, then watches components dir (+ tokens dir + project root for config). Debounced rebuilds. Does **not** start a browser server (use Vite/sandbox separately). |
 
 Add a script in your design-system `package.json`:
 
@@ -564,7 +566,7 @@ Be aware of these before relying on Kitbash in production:
 4. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface. Product a11y (labels, announcements) is design-system work.
 5. **Function serialization** — hard rule above; no real closures over module scope.
 6. **Bun-only toolchain** — Node is not a supported host for the CLI today.
-7. **No `kitbash dev` yet** — monorepo uses `bun run dev` (watch + sandbox).
+7. **`kitbash dev` is compile-only** — no built-in Vite/HMR server (pair with your app’s dev server; monorepo sandbox still uses `bun run dev`).
 
 ---
 
@@ -574,7 +576,7 @@ Contributions and experiments welcome. High-value directions:
 
 | Idea | Why |
 |------|-----|
-| **Watch mode** (`kitbash dev`) | Faster authoring loop with rebuild on save |
+| **Dev server integration** | Optional Vite plugin / HMR for `kitbash dev` |
 | **`frameworks` toggles in config** | Opt out of react emit / future targets |
 | **Svelte / Vue wrapper codegen** | First-class DX beyond vanilla tags |
 | **Richer CEM** | Events, slots, CSS parts/properties for docs tools |

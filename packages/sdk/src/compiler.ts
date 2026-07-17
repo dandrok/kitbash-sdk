@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, resolve as pathResolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { ComponentConfig } from './index.js';
 
 const uhtmlPath = Bun.resolveSync('uhtml', import.meta.dir);
@@ -420,8 +421,8 @@ export async function compileComponents(
     } catch (err) {
       console.warn('⚠️ Failed to parse tokens file:', err);
     }
-  } else if (options.tokensFile) {
-    console.warn(`⚠️ Tokens file not found: ${tokensFile}`);
+  } else {
+    // Optional tokens — missing file is fine (no CSS vars from tokens).
   }
 
   const cemModules = [];
@@ -430,7 +431,10 @@ export async function compileComponents(
     if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
 
     const filePath = pathResolve(componentsDir, file);
-    const module = await import(filePath);
+    // file URL + cache-bust so `kitbash dev` picks up edits (ESM caches bare paths)
+    const module = await import(
+      `${pathToFileURL(filePath).href}?t=${Date.now()}`
+    );
     const config: ComponentConfig = module.default;
 
     if (!config?.tag) {
@@ -468,6 +472,9 @@ export async function compileComponents(
       console.error(result.logs);
       throw new Error(`Build failed for ${componentName}`);
     }
+
+    // Note: *.src.js intermediate remains next to the bundle (handy for debug/tests).
+    // Stripping on publish is a future packaging step.
 
     // React 19 Target
     const { code: reactCode, types: reactTypes } = generateReactWrapper(

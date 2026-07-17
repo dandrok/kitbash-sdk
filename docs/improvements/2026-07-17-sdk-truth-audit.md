@@ -78,3 +78,15 @@
 ## Out of scope for audit file
 
 Skill/MCP (Phase 2–3) — after supported surface stays stable for a few loops.
+
+## CodeRabbit catch-up (when rate limit resets)
+
+CodeRabbit hit a usage limit mid-branch. When available again, re-run a full branch review so it sees commits it missed:
+
+```bash
+cr review --plain --base main
+# optional focused:
+cr review --plain --base main --dir packages/sdk
+```
+
+Priority: config loading, runtime tests, `kitbash dev`, form `commit` contract.

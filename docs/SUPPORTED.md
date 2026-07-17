@@ -40,7 +40,7 @@ It is **not** a finished design system (no official button kit, themes, or produ
 | Product a11y content | Labels, error copy, live regions = DS components |
 | Svelte/Vue generated wrappers | Use vanilla CE |
 | `frameworks` config toggles | Always emit vanilla + react for now |
-| Watch mode in published CLI | Monorepo has `bun run dev`; no `kitbash dev` yet |
+| Full app HMR with `kitbash dev` | `kitbash dev` watches + rebuilds only; bring your own app server |
 | Object/array props as attributes | Primitives only reflected to attributes |
 | Node-hosted CLI | Bun-only |
 
