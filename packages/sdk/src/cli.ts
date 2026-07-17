@@ -103,13 +103,19 @@ async function main() {
   } else if (command === 'build') {
     console.log(`\n🚀 Compiling Kitbash components...\n`);
     const projectDir = process.cwd();
-    const outDir = resolve(projectDir, 'dist');
 
     try {
-      // Dynamic import to avoid loading the compiler during fast init commands
+      const { loadProjectConfig } = await import('./config.js');
       const { compileComponents } = await import('./compiler.js');
-      await compileComponents(projectDir, outDir);
-      console.log(`\n✅ Build successful! Outputs written to dist/\n`);
+      const cfg = await loadProjectConfig(projectDir);
+      if (cfg.source !== 'defaults') {
+        console.log(`📄 Using config from ${cfg.source}`);
+      }
+      await compileComponents(projectDir, cfg.outDir, {
+        componentsDir: cfg.componentsDir,
+        tokensFile: cfg.tokensFile,
+      });
+      console.log(`\n✅ Build successful! Outputs written to ${cfg.outDir}/\n`);
     } catch (err) {
       console.error(`❌ Build failed:`, err);
       process.exit(1);
@@ -120,7 +126,7 @@ async function main() {
 
 Commands:
   init <project-name>   Scaffold a new design system
-  build                 Compile src/components to dist/
+  build                 Compile components (kitbash.config.ts optional)
     `);
   }
 }

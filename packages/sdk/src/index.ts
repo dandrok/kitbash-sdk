@@ -40,5 +40,10 @@ export interface ComponentConfig {
 
 export function defineComponent<T extends ComponentConfig>(config: T): T {
   // Evaluation compiler: typed identity. Runtime compiler import()s this object.
+  // IMPORTANT: render/events are .toString()'d into generated code — do not close
+  // over imports or outer-scope locals; use only props, state, commit/setProps/setState.
   return config;
 }
+
+export type { KitbashProjectConfig } from './config.js';
+export { loadProjectConfig } from './config.js';

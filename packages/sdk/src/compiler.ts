@@ -384,8 +384,21 @@ export declare const ${pascalName}: React.ForwardRefExoticComponent<${pascalName
   return { code, types };
 }
 
-export async function compileComponents(projectDir: string, outDir: string) {
-  const componentsDir = pathResolve(projectDir, 'src/components');
+export type CompileOptions = {
+  /** Absolute components directory (default: projectDir/src/components) */
+  componentsDir?: string;
+  /** Absolute tokens JSON path (default: projectDir/src/tokens.json) */
+  tokensFile?: string;
+};
+
+export async function compileComponents(
+  projectDir: string,
+  outDir: string,
+  options: CompileOptions = {},
+) {
+  const componentsDir = options.componentsDir
+    ? pathResolve(projectDir, options.componentsDir)
+    : pathResolve(projectDir, 'src/components');
   let files: string[];
   try {
     files = await readdir(componentsDir);
@@ -395,16 +408,20 @@ export async function compileComponents(projectDir: string, outDir: string) {
   }
 
   let tokensCss = '';
-  const tokensFile = pathResolve(projectDir, 'src/tokens.json');
+  const tokensFile = options.tokensFile
+    ? pathResolve(projectDir, options.tokensFile)
+    : pathResolve(projectDir, 'src/tokens.json');
   if (existsSync(tokensFile)) {
     try {
       const tokensContent = await Bun.file(tokensFile).text();
       const tokens = JSON.parse(tokensContent);
       tokensCss = `:host {\n${generateTokenStyles(tokens)}}\n`;
-      console.log('🎨 Loaded design tokens from tokens.json');
+      console.log(`🎨 Loaded design tokens from ${tokensFile}`);
     } catch (err) {
-      console.warn('⚠️ Failed to parse tokens.json:', err);
+      console.warn('⚠️ Failed to parse tokens file:', err);
     }
+  } else if (options.tokensFile) {
+    console.warn(`⚠️ Tokens file not found: ${tokensFile}`);
   }
 
   const cemModules = [];

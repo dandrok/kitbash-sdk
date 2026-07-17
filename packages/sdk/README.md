@@ -40,7 +40,7 @@ You get a short authoring surface; consumers get real custom elements that work 
 | **DX** | `kitbash init` scaffold, `kitbash build`, CEM for editors |
 | **Runtime deps for consumers** | Vanilla bundles bake in `uhtml` — no extra install for end apps |
 
-**Not (yet):** full Svelte wrapper codegen (use vanilla tags), config-driven `outDir`/framework toggles (see [Known limitations (0.1.x)](#known-limitations-01x)), watch mode, Storybook plugin, etc.
+**Not (yet):** full Svelte wrapper codegen (use vanilla tags), `frameworks` config toggles, watch mode (`kitbash dev`), Storybook plugin, etc. (see [Known limitations (0.1.x)](#known-limitations-01x)).
 
 ---
 
@@ -75,7 +75,7 @@ bunx @ktbsh/sdk init my-design-system
 
 ```text
 my-design-system/
-├── kitbash.config.ts      # reserved for future config (see notes below)
+├── kitbash.config.ts      # optional: components / tokens / outDir
 ├── package.json           # "build": "kitbash build"
 └── src/
     ├── tokens.json        # design tokens → CSS variables on :host
@@ -224,6 +224,18 @@ The compiler pins **`uhtml@4.7.1`**. v5’s signal rewrite and some conditional-
 
 ## Authoring API
 
+### Hard rule: no outer closures
+
+`render` and `events` handlers are **serialized with `.toString()`** into the generated custom element. They do **not** keep a real JS closure over your module.
+
+| OK | Not OK |
+|----|--------|
+| Use `props`, `state`, `commit`, `setProps`, `setState`, `html`, DOM APIs | `import { x } from '…'` then use `x` inside `render` / `events` |
+| Inline strings, numbers, simple logic | Capture outer `const theme = …` or helpers from the same file |
+| Call methods on `e.target` | Rely on module-level variables |
+
+If you need shared helpers, either inline them or wait for a future “runtime helpers” package — do not close over imports.
+
 ```ts
 import { defineComponent, type ComponentConfig } from '@ktbsh/sdk';
 
@@ -333,7 +345,7 @@ my-button::part(button-root) {
 }
 ```
 
-**3. Design tokens file** — optional `src/tokens.json`:
+**3. Design tokens file** — optional (default `src/tokens.json`, overridable in config):
 
 ```json
 {
@@ -414,9 +426,9 @@ Add a script in your design-system `package.json`:
 
 ---
 
-## Project layout conventions
+## Project layout & `kitbash.config.ts`
 
-These paths are **fixed by the compiler today** (not fully driven by `kitbash.config.ts` yet):
+Defaults (when no config file):
 
 | Path | Role |
 |------|------|
@@ -424,7 +436,23 @@ These paths are **fixed by the compiler today** (not fully driven by `kitbash.co
 | `src/tokens.json` | Optional design tokens |
 | `dist/` | Build output |
 
-`kitbash.config.ts` is scaffolded for forward compatibility (`frameworks`, `tokens`, `outDir`) but **is not read by the compiler in 0.1.x**. Changing it will not change build behavior yet.
+Optional **`kitbash.config.ts`** (or `.js`) is **loaded by `kitbash build`**:
+
+```ts
+export default {
+  components: './src/components', // relative to project root
+  tokens: './src/tokens.json',
+  outDir: './dist',
+  frameworks: ['react', 'svelte'], // reserved — 0.1.x always emits vanilla + react
+};
+```
+
+| Key | Applied? |
+|-----|----------|
+| `components` | Yes |
+| `tokens` | Yes |
+| `outDir` | Yes |
+| `frameworks` | No (logged as reserved) |
 
 ---
 
@@ -507,11 +535,12 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 ### Styles don’t apply from the parent page
 
 - Shadow DOM encapsulates plain element selectors — use **CSS variables** or **`::part(...)`**
-- Tokens only apply if `src/tokens.json` exists and parses as JSON at build time
+- Tokens only apply if the tokens file exists and parses as JSON at build time (default path or `tokens` in config)
 
-### `tokens.json` ignored
+### Tokens ignored
 
-- Path must be exactly `src/tokens.json` relative to the project you build
+- Default path is `src/tokens.json` unless `kitbash.config.ts` sets `tokens`
+- Missing file → no token CSS (warning if you set a custom `tokens` path)
 - Invalid JSON logs a warning and continues without tokens
 
 ### Init: “Directory already exists” / invalid name
@@ -529,13 +558,13 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 
 Be aware of these before relying on Kitbash in production:
 
-1. **`kitbash.config.ts` is not wired up** — paths and targets are hardcoded.
-2. **No dedicated Svelte/Vue wrappers** — use vanilla custom elements.
-3. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
-4. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
-5. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface. Product a11y (labels, announcements) is design-system work.
-6. **Function serialization** — `render` / `events` are `.toString()`’d into the output. Closures over imports or outer locals will **not** work; keep handlers self-contained or use only `props` / `state` / `commit` / `setProps` / `setState` / DOM APIs.
-7. **Bun-only toolchain** — Node is not a supported host for the CLI today.
+1. **`frameworks` in config is reserved** — vanilla + react always emitted; no Svelte/Vue wrappers yet (use vanilla CE).
+2. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
+3. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
+4. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface. Product a11y (labels, announcements) is design-system work.
+5. **Function serialization** — hard rule above; no real closures over module scope.
+6. **Bun-only toolchain** — Node is not a supported host for the CLI today.
+7. **No `kitbash dev` yet** — monorepo uses `bun run dev` (watch + sandbox).
 
 ---
 
@@ -546,7 +575,7 @@ Contributions and experiments welcome. High-value directions:
 | Idea | Why |
 |------|-----|
 | **Watch mode** (`kitbash dev`) | Faster authoring loop with rebuild on save |
-| **Honor `kitbash.config.ts` or stop shipping it as live config** | Honesty: file is ignored today |
+| **`frameworks` toggles in config** | Opt out of react emit / future targets |
 | **Svelte / Vue wrapper codegen** | First-class DX beyond vanilla tags |
 | **Richer CEM** | Events, slots, CSS parts/properties for docs tools |
 | **Stable public runtime helpers** | Shared utilities without relying on serialized closures |

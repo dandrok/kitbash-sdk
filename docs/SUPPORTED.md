@@ -9,7 +9,7 @@ Backlog from audits: [`docs/improvements/`](./improvements/).
 A **compiler + authoring API** for design-system components:
 
 1. Author with `defineComponent({ … })` in TypeScript  
-2. `kitbash build` loads each file under the **fixed** path `src/components` (it does **not** read `kitbash.config.ts` in 0.1.x) and emits:
+2. `kitbash build` loads optional `kitbash.config.ts` (`components`, `tokens`, `outDir`; defaults if missing) and emits:
    - Vanilla custom elements (Shadow DOM, uhtml v4, tokens/parts)
    - React wrappers (`onKitbashChange`, native props/handlers)
    - Minimal `custom-elements.json`
@@ -28,9 +28,9 @@ It is **not** a finished design system (no official button kit, themes, or produ
 | Theming hooks | CSS variables on `:host`, `part`, optional `src/tokens.json` → CSS vars |
 | Slots | Standard HTML slots; React `children` → light DOM |
 | Outputs | `dist/vanilla/*`, `dist/react/*`, `dist/custom-elements.json` |
-| Paths | Fixed: `src/components` → `dist/` (cwd) |
-| Frameworks | Vanilla + React codegen; Svelte via vanilla tags |
-| Tests | Compiler source contract tests + runtime CE contract tests (happy-dom) + monorepo smoke (`init` + fixture build) |
+| Paths | Defaults `src/components` → `dist/`; overridable via `kitbash.config.ts` |
+| Frameworks | Vanilla + React codegen; Svelte via vanilla tags (`frameworks` key reserved) |
+| Tests | Compiler source + runtime CE contracts + config tests + monorepo smoke |
 
 ## Explicit non-goals (for now)
 
@@ -39,14 +39,14 @@ It is **not** a finished design system (no official button kit, themes, or produ
 | Full design-system UI | Belongs in a future package/repo (e.g. kitbash-ui) |
 | Product a11y content | Labels, error copy, live regions = DS components |
 | Svelte/Vue generated wrappers | Use vanilla CE |
-| Reading `kitbash.config.ts` | Scaffolded only; **ignored** by compiler |
+| `frameworks` config toggles | Always emit vanilla + react for now |
 | Watch mode in published CLI | Monorepo has `bun run dev`; no `kitbash dev` yet |
 | Object/array props as attributes | Primitives only reflected to attributes |
 | Node-hosted CLI | Bun-only |
 
 ## Hard rules (agents & humans)
 
-1. **No closures** in `render` / `events` over imports or outer locals (`.toString()` serialization).  
+1. **No closures** in `render` / `events` over imports or outer locals (`.toString()` serialization). This is the #1 authoring footgun.  
 2. Prefer **`commit`** for user input so `e.detail.props` is fresh.  
 3. External `el.value = x` / React `value={x}` does **not** fire `kitbash-change`.  
 4. Edit **root** `templates/default` for scaffolds; package embed is regenerated on SDK build (init README preserved).  
