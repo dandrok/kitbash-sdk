@@ -5,12 +5,9 @@
  * Run: bun run e2e/prepare.ts && bun test e2e/browser-runtime.bun.test.ts
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from '@playwright/test';
-
-const port = 4173;
-const baseURL = `http://127.0.0.1:${port}`;
 
 type KitbashBridge = {
   events: Array<{
@@ -29,6 +26,7 @@ describe('browser minified vanilla field (real uhtml)', () => {
   let browser: Browser;
   let page: Page;
   let server: ReturnType<typeof Bun.serve>;
+  let baseURL = '';
 
   beforeAll(async () => {
     // Expect fixture prepared by test:browser:prepare
@@ -44,18 +42,22 @@ describe('browser minified vanilla field (real uhtml)', () => {
       '.json': 'application/json',
     };
 
+    // port 0 → OS ephemeral port (avoids CI collisions)
     server = Bun.serve({
-      port,
+      port: 0,
       async fetch(req) {
         const url = new URL(req.url);
-        let pathname = url.pathname === '/' ? '/index.html' : url.pathname;
-        pathname = pathname.replace(/\.\./g, '');
-        const filePath = join(root, pathname);
+        const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+        const filePath = resolve(root, `.${pathname}`);
+        const rootWithSep = root.endsWith(sep) ? root : root + sep;
+        if (filePath !== root && !filePath.startsWith(rootWithSep)) {
+          return new Response('Forbidden', { status: 403 });
+        }
         const file = Bun.file(filePath);
         if (!(await file.exists())) {
           return new Response('Not found', { status: 404 });
         }
-        const ext = pathname.slice(pathname.lastIndexOf('.'));
+        const ext = extname(filePath);
         return new Response(file, {
           headers: {
             'Content-Type': mime[ext] || 'application/octet-stream',
@@ -64,6 +66,7 @@ describe('browser minified vanilla field (real uhtml)', () => {
         });
       },
     });
+    baseURL = `http://127.0.0.1:${server.port}`;
 
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage();
