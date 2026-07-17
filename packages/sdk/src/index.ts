@@ -1,3 +1,32 @@
+/** Payload on every user-driven `kitbash-change` event. */
+export interface KitbashChangeDetail {
+  props: Record<string, unknown>;
+  state: Record<string, unknown>;
+}
+
+/** Batch update: one re-render, one `kitbash-change`. Prefer over separate setProps+setState. */
+export type KitbashCommit = (patch: {
+  props?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+}) => void;
+
+export interface KitbashRenderContext {
+  props: Record<string, unknown>;
+  state: Record<string, unknown>;
+  setState: (state: Record<string, unknown>) => void;
+  setProps: (props: Record<string, unknown>) => void;
+  commit: KitbashCommit;
+  html: unknown;
+}
+
+export interface KitbashEventContext {
+  props: Record<string, unknown>;
+  state: Record<string, unknown>;
+  setState: (state: Record<string, unknown>) => void;
+  setProps: (props: Record<string, unknown>) => void;
+  commit: KitbashCommit;
+}
+
 export interface ComponentConfig {
   tag: string;
   formAssociated?: boolean;
@@ -5,26 +34,11 @@ export interface ComponentConfig {
   props?: Record<string, { type: unknown; default: unknown }>;
   state?: Record<string, unknown>;
   styles?: string;
-  render?: (ctx: {
-    props: Record<string, unknown>;
-    state: Record<string, unknown>;
-    setState: (state: Record<string, unknown>) => void;
-    html: unknown;
-  }) => unknown;
-  events?: Record<
-    string,
-    (
-      e: Event,
-      ctx: {
-        state: Record<string, unknown>;
-        setState: (state: Record<string, unknown>) => void;
-      },
-    ) => void
-  >;
+  render?: (ctx: KitbashRenderContext) => unknown;
+  events?: Record<string, (e: Event, ctx: KitbashEventContext) => void>;
 }
 
 export function defineComponent<T extends ComponentConfig>(config: T): T {
-  // In the "Evaluation Compiler" strategy, this acts purely as a factory and type-validator.
-  // The runtime compiler will dynamically import the file and extract this returned configuration.
+  // Evaluation compiler: typed identity. Runtime compiler import()s this object.
   return config;
 }

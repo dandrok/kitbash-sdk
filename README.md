@@ -144,13 +144,10 @@ export default defineComponent({
     }
   `,
   events: {
-    'input input'(e: Event, { setState }) {
+    // one commit → one re-render → kitbash-change with fresh props.value
+    'input input'(e: Event, { commit }) {
       const target = e.target as HTMLInputElement;
-      const host = (target.getRootNode() as ShadowRoot).host as HTMLElement & {
-        value: string;
-      };
-      host.value = target.value;
-      setState({ value: target.value });
+      commit({ props: { value: target.value } });
     },
   },
   render({ props, html }) {

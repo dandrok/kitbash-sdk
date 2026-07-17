@@ -206,11 +206,12 @@ Kitbash uses an **evaluation compiler**, not an AST rewrite of your source files
 | Concern | Behavior |
 |---------|----------|
 | Props | Reflected as attributes; `String` / `Number` / `Boolean` coercion |
-| State | Internal `_state`; updated via `setState` |
-| Re-render | `uhtml` `render()` into `shadowRoot` on prop/state changes |
-| Events | Selectors like `'click button'` or `'input input'` bind after each update |
-| Change event | `setState` dispatches bubbling/composed `kitbash-change` with `{ state, props }` |
-| Forms | If `formAssociated`, uses `ElementInternals` (`setFormValue`, basic validity for `required` / `invalid`) |
+| State | Internal `_state` |
+| Updates | `commit({ props?, state? })` — **one** re-render + **one** `kitbash-change`. `setProps` / `setState` are thin wrappers around `commit`. |
+| Re-render | `uhtml` `render()` into `shadowRoot` |
+| Events | Selectors like `'click button'` or `'input input'`; handlers receive `{ props, state, commit, setProps, setState }` |
+| Change event | User-driven `commit` / `setProps` / `setState` only (not external `el.value = …` from the parent) |
+| Forms | If `formAssociated`, `ElementInternals` + `setFormValue` on `value`; basic validity for `required` / `invalid` |
 
 ### Why uhtml v4?
 
@@ -234,9 +235,9 @@ export default defineComponent({
   styles?: string,             // CSS injected into constructable stylesheet
   events?: {
     // key: "eventName" or "eventName css-selector"
-    'click button'(e, { state, setState }) { /* … */ }
+    'click button'(e, { commit, setState }) { /* … */ }
   },
-  render({ props, state, setState, html }) {
+  render({ props, state, commit, setProps, setState, html }) {
     return html`…`;           // uhtml template (html tagged template)
   },
 });
@@ -248,10 +249,31 @@ export default defineComponent({
 - **Boolean:** presence of the attribute (or `true`) → `true`; missing / `"false"` → falsey handling as in the generated code.
 - **Number:** attribute strings are coerced with `Number(...)`.
 - Defaults apply when the attribute is removed.
+- **External** writes (`el.value = 'x'` or React `value={…}`) re-render but **do not** fire `kitbash-change` (the parent already knows).
 
-### State & `setState`
+### `commit` / `setProps` / `setState` (fast path)
 
-Use `state` for UI-only data (hover, open, click counts). Call `setState({ … })` from `render` handlers or `events` — that triggers re-render and fires **`kitbash-change`**.
+| API | Use for |
+|-----|---------|
+| **`commit({ props?, state? })`** | Preferred — batch props + state in **one** update and **one** `kitbash-change` |
+| **`setProps({ … })`** | Props only (wrapper around `commit`) |
+| **`setState({ … })`** | UI state only — open/hover/touched (wrapper around `commit`) |
+
+Controlled input (scaffold pattern):
+
+```ts
+events: {
+  'input input'(e, { commit }) {
+    const t = e.target as HTMLInputElement;
+    commit({
+      props: { value: t.value },
+      state: { touched: true },
+    });
+  },
+},
+```
+
+Consumers read **`e.detail.props.value`** (and `e.detail.state`) on `kitbash-change` / React `onKitbashChange`.
 
 ### Events map
 
@@ -259,13 +281,8 @@ Keys are space-separated: **`eventName`** optional **`selector`**.
 
 ```ts
 events: {
-  // host-level
-  'kitbash-change'(e, { setState }) { /* … */ },
-  // delegated inside shadow root
-  'input input'(e, { setState }) {
-    const t = e.target as HTMLInputElement;
-    // often you also write the host property for form sync:
-    // (see scaffold input.ts)
+  'input input'(e, { commit }) {
+    commit({ props: { value: (e.target as HTMLInputElement).value } });
   },
 }
 ```
@@ -337,6 +354,11 @@ export default defineComponent({
     required: { type: Boolean, default: false },
     invalid: { type: Boolean, default: false },
   },
+  events: {
+    'input input'(e, { commit }) {
+      commit({ props: { value: (e.target as HTMLInputElement).value } });
+    },
+  },
   // …
 });
 ```
@@ -344,10 +366,10 @@ export default defineComponent({
 Generated behavior includes:
 
 - `static formAssociated = true`
-- `attachInternals()` and `setFormValue` when `value` changes
+- `attachInternals()` and `setFormValue` when `value` is assigned (via `commit` / `setProps` / property)
 - Basic `setValidity` for `required` / `invalid` props
 
-For live typing, the scaffold input also assigns `host.value` inside the `input` event so form data stays in sync — copy that pattern for real form fields.
+**SDK vs design system:** Kitbash wires platform form participation and focus delegation. Labels, error copy, live regions, and full WCAG product patterns belong in **your** design system components — not the compiler.
 
 ### React wrapper contract
 
@@ -355,9 +377,9 @@ For live typing, the scaffold input also assigns `host.value` inside the `input`
 |--------------|---------|
 | Declared props | Passed through to the custom element |
 | `children` | Light DOM → slots |
-| `onClick` | Native `click` listener on the element |
-| `onKitbashChange` | Listens for `kitbash-change` (`e.detail.state` / `e.detail.props`) |
-| `ref` | Forwarded to the host element (RefObject assumed today) |
+| `onClick` (and other native DOM handlers) | Forwarded on the host — React 19 binds them (not double-wrapped) |
+| `onKitbashChange` | Bridges custom `kitbash-change` (`e.detail.props` / `e.detail.state`) |
+| `ref` | Callback refs and `RefObject` both supported |
 
 ---
 
@@ -471,8 +493,8 @@ Point VS Code / CEM tooling at `custom-elements.json` for tag autocomplete where
 
 ### React: `onKitbashChange` never fires
 
-- It only fires when **`setState`** runs inside the component (not on every attribute set from outside)
-- For controlled inputs, update host `value` in the event handler and call `setState` (see scaffold `input.ts`)
+- It only fires when **`commit` / `setProps` / `setState`** run inside the component (not when React sets `value={…}` from outside)
+- For controlled inputs use `commit({ props: { value } })` in the `input` handler (see scaffold `input.ts`), then `onKitbashChange={(e) => setVal(e.detail.props.value)}`
 
 ### React types / JSX unknown tag
 
@@ -506,12 +528,11 @@ Be aware of these before relying on Kitbash in production:
 
 1. **`kitbash.config.ts` is not wired up** — paths and targets are hardcoded.
 2. **No dedicated Svelte/Vue wrappers** — use vanilla custom elements.
-3. **React `ref` merging is simplified** — callback refs are not fully merged.
-4. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
-5. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
-6. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface.
-7. **Function serialization** — `render` / `events` are `.toString()`’d into the output. Closures over imports or outer locals will **not** work; keep handlers self-contained or use only `props` / `state` / `setState` / DOM APIs.
-8. **Bun-only toolchain** — Node is not a supported host for the CLI today.
+3. **Event map rebinds every update** — fine for small trees; measure if you bind many nodes.
+4. **CEM is minimal** — tags/attributes only; no slots/events/CSS parts documentation yet.
+5. **Form validity is basic** — `required` / `invalid` only; no full constraint validation API surface. Product a11y (labels, announcements) is design-system work.
+6. **Function serialization** — `render` / `events` are `.toString()`’d into the output. Closures over imports or outer locals will **not** work; keep handlers self-contained or use only `props` / `state` / `commit` / `setProps` / `setState` / DOM APIs.
+7. **Bun-only toolchain** — Node is not a supported host for the CLI today.
 
 ---
 

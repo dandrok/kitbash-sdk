@@ -10,7 +10,8 @@
     "ci": "bunx @biomejs/biome ci .",
     "build:sdk": "bun run --cwd packages/sdk build",
     "smoke": "bun run scripts/ci-smoke.ts",
-    "test": "bun run smoke"
+    "test:sdk": "bun run --cwd packages/sdk test",
+    "test": "bun run test:sdk && bun run smoke"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4"
