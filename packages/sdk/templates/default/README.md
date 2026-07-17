@@ -1,64 +1,86 @@
-# Default template (workspace fixture)
+# Kitbash starter (init template)
 
-Sample design system used **inside this monorepo** to exercise the compiler and power the [sandbox](../../sandbox).
+This folder is the **default scaffold** copied when someone runs:
 
-When you run `bun run dev` from the repo root, [`scripts/dev.ts`](../../scripts/dev.ts) points at this folder:
+```bash
+kitbash init my-design-system
+# or
+bunx @ktbsh/sdk init my-design-system
+```
 
-- **Input:** `src/components/*.ts`, optional `src/tokens.json`
-- **Output:** `dist/` (vanilla, react, `custom-elements.json`)
-- **Consumers:** sandbox demos import from `templates/default/dist/...`
-
----
-
-## Layout
+After init you should have roughly:
 
 ```text
-templates/default/
-├── kitbash.config.ts   # reserved; not read by compiler in 0.1.x
-├── package.json        # "build": "kitbash build", depends on @ktbsh/sdk
-├── src/
-│   ├── tokens.json     # → CSS variables on :host at compile time
-│   └── components/
-│       ├── button.ts   # <my-button> — slots, variants, state
-│       └── input.ts    # <kitbash-input> — formAssociated example
-└── dist/               # generated (git may or may not track; rebuild locally)
+my-design-system/
+├── README.md              # this file
+├── kitbash.config.ts      # future config (not applied by the compiler yet)
+├── package.json
+└── src/
+    ├── tokens.json
+    └── components/
+        ├── button.ts
+        └── input.ts
 ```
 
 ---
 
-## Build
-
-From this directory (with workspace install done at repo root):
+## Next steps
 
 ```bash
+cd my-design-system
+bun install
 bun run build
-# → kitbash build → dist/
 ```
 
-Or from repo root via the dev script (build + watch + sandbox):
+Output lands in `dist/`:
 
-```bash
-bun run dev
+- `dist/vanilla/*.js` — browser custom elements (uhtml bundled)
+- `dist/react/*.js` + `*.d.ts` — React wrappers
+- `dist/custom-elements.json` — IDE / CEM metadata
+
+---
+
+## Try the examples
+
+| File | Tag | Notes |
+|------|-----|--------|
+| `src/components/button.ts` | `my-button` | Variants, slot, click state |
+| `src/components/input.ts` | `kitbash-input` | `formAssociated`, focus delegation |
+
+**Vanilla:**
+
+```html
+<script type="module">
+  import './dist/vanilla/button.js';
+</script>
+<my-button variant="primary">Hello</my-button>
+```
+
+**React:**
+
+```tsx
+import { MyButton } from './dist/react/button.js';
+
+<MyButton variant="primary" onClick={() => {}}>Hello</MyButton>
 ```
 
 ---
 
-## Relationship to `kitbash init`
+## Add a component
 
-| | This folder (`templates/default`) | `packages/sdk/templates/default` |
-|--|-----------------------------------|----------------------------------|
-| Used by | Sandbox, monorepo dev loop | `kitbash init <name>` for users |
-| SDK dependency | Often `workspace:*` | Rewritten to a semver range on init |
-| `dist/` | Expected after local builds | Not shipped; users run `bun run build` |
+1. Create `src/components/card.ts` with `export default defineComponent({ tag: 'my-card', … })`.
+2. Run `bun run build`.
+3. Import `dist/vanilla/card.js` or `dist/react/card.js`.
 
-When you improve the starter components or tokens, update **both** trees so init users and the sandbox stay consistent.
+Full authoring API, theming, forms, and troubleshooting:
+
+- In this monorepo: [SDK package README](../../README.md)
+- Published package: [npm @ktbsh/sdk](https://www.npmjs.com/package/@ktbsh/sdk)
 
 ---
 
-## Authoring rules (same as any Kitbash project)
+## Notes
 
-- One component file → `export default defineComponent({ tag: '…', … })`
-- Paths are fixed today: `src/components` → `dist/`
-- Keep `render` / `events` free of outer closures (they are serialized into output)
-
-Full API and troubleshooting: [packages/sdk/README.md](../../packages/sdk/README.md).
+- **Bun** is required for `kitbash build`.
+- `kitbash.config.ts` is a placeholder; build always uses `src/components` → `dist/` for now.
+- Prefer property bindings like `.value=${props.value}` for inputs so focus is not lost on re-render.
