@@ -629,4 +629,5 @@ MIT
 ## Links
 
 - npm: [`@ktbsh/sdk`](https://www.npmjs.com/package/@ktbsh/sdk)
-- Repository: [github.com/kitbash/sdk](https://github.com/kitbash/sdk)
+- Repository: [github.com/dandrok/kitbash-sdk](https://github.com/dandrok/kitbash-sdk)
+- SDK package path: [packages/sdk](https://github.com/dandrok/kitbash-sdk/tree/main/packages/sdk)
