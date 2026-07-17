@@ -1,8 +1,20 @@
 import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { basename, resolve as pathResolve } from 'node:path';
+import { basename, isAbsolute, resolve as pathResolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { ComponentConfig } from './index.js';
+
+/** Resolve option path: absolute stays absolute; relative is against projectDir. */
+function resolveProjectPath(
+  projectDir: string,
+  pathOrUndef: string | undefined,
+  fallbackRelative: string,
+): string {
+  if (!pathOrUndef) return pathResolve(projectDir, fallbackRelative);
+  return isAbsolute(pathOrUndef)
+    ? pathOrUndef
+    : pathResolve(projectDir, pathOrUndef);
+}
 
 const uhtmlPath = Bun.resolveSync('uhtml', import.meta.dir);
 
@@ -224,7 +236,10 @@ ${propsArray
   commit(patch) {
     const p = patch || {};
     if (p.props) {
+      const allowed = this.constructor.propTypes || {};
       for (const key of Object.keys(p.props)) {
+        // Only declared props — ignore typos / stray keys
+        if (!Object.prototype.hasOwnProperty.call(allowed, key)) continue;
         this._assignProp(key, p.props[key]);
       }
     }
@@ -244,9 +259,10 @@ ${propsArray
   }
 
   _handlerCtx() {
+    // Snapshots so handlers/render cannot mutate internal bags by accident
     return {
-      props: this._props,
-      state: this._state,
+      props: { ...this._props },
+      state: { ...this._state },
       setState: this.setState.bind(this),
       setProps: this.setProps.bind(this),
       commit: this.commit.bind(this),
@@ -397,9 +413,11 @@ export async function compileComponents(
   outDir: string,
   options: CompileOptions = {},
 ) {
-  const componentsDir = options.componentsDir
-    ? pathResolve(projectDir, options.componentsDir)
-    : pathResolve(projectDir, 'src/components');
+  const componentsDir = resolveProjectPath(
+    projectDir,
+    options.componentsDir,
+    'src/components',
+  );
   let files: string[];
   try {
     files = await readdir(componentsDir);
@@ -409,9 +427,11 @@ export async function compileComponents(
   }
 
   let tokensCss = '';
-  const tokensFile = options.tokensFile
-    ? pathResolve(projectDir, options.tokensFile)
-    : pathResolve(projectDir, 'src/tokens.json');
+  const tokensFile = resolveProjectPath(
+    projectDir,
+    options.tokensFile,
+    'src/tokens.json',
+  );
   if (existsSync(tokensFile)) {
     try {
       const tokensContent = await Bun.file(tokensFile).text();

@@ -90,3 +90,14 @@ cr review --plain --base main --dir packages/sdk
 ```
 
 Priority: config loading, runtime tests, `kitbash dev`, form `commit` contract.
+
+## Self-review follow-up (fixed before push)
+
+- [x] `kitbash dev` re-attaches watchers after each rebuild (config path changes)
+- [x] Absolute path resolution in `compileComponents` (`isAbsolute` guard)
+- [x] `commit` only assigns declared props
+- [x] Handler/render ctx shallow-copies props/state
+- [x] CLI `strict` parseArgs + `--help`; unknown commands fail clearly
+- [x] SIGINT closes file watchers
+- [ ] Playwright / real-browser test of minified uhtml bundle (still open)
+- [ ] Long-session ESM cache growth under `?t=` (documented tradeoff)

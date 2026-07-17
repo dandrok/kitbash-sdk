@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
-import { existsSync, watch } from 'node:fs';
+import { existsSync, type FSWatcher, watch } from 'node:fs';
 import { cp } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import type { KitbashProjectConfig } from './config.js';
 
 function printHelp() {
   console.log(`
@@ -12,20 +13,33 @@ Commands:
   init <project-name>   Scaffold a new design system
   build                 Compile components (kitbash.config.ts optional)
   dev                   Watch components/tokens/config and rebuild
+
+Options:
+  -h, --help            Show this help
   `);
 }
 
 async function main() {
-  const { positionals, values } = parseArgs({
-    args: Bun.argv.slice(2),
-    allowPositionals: true,
-    strict: false,
-    options: {
-      help: { type: 'boolean', short: 'h' },
-    },
-  });
+  let positionals: string[];
+  let values: { help?: boolean };
+  try {
+    const parsed = parseArgs({
+      args: Bun.argv.slice(2),
+      allowPositionals: true,
+      strict: true,
+      options: {
+        help: { type: 'boolean', short: 'h' },
+      },
+    });
+    positionals = parsed.positionals;
+    values = parsed.values;
+  } catch (err) {
+    console.error(`❌ ${(err as Error).message}`);
+    printHelp();
+    process.exit(1);
+  }
 
-  if (values.help) {
+  if (values.help || !positionals[0]) {
     printHelp();
     return;
   }
@@ -66,7 +80,6 @@ async function main() {
 
     let templateDir = resolve(import.meta.dir, '../templates/default');
     if (!existsSync(templateDir)) {
-      // Fallback for local monorepo development if it wasn't built yet
       templateDir = resolve(import.meta.dir, '../../../templates/default');
     }
 
@@ -106,7 +119,6 @@ async function main() {
         if (targetPkg.devDependencies?.['@ktbsh/sdk'] === 'workspace:*') {
           targetPkg.devDependencies['@ktbsh/sdk'] = sdkVersion;
         }
-        // Prefer watch-friendly script for new scaffolds
         targetPkg.scripts = {
           ...targetPkg.scripts,
           build: 'kitbash build',
@@ -149,6 +161,70 @@ async function main() {
     let building = false;
     let queued = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const watchers: FSWatcher[] = [];
+
+    const clearWatchers = () => {
+      for (const w of watchers) {
+        try {
+          w.close();
+        } catch {
+          // ignore
+        }
+      }
+      watchers.length = 0;
+    };
+
+    const attachWatchers = (
+      cfg: KitbashProjectConfig,
+      schedule: (reason: string) => void,
+    ) => {
+      clearWatchers();
+
+      const watchPath = (
+        path: string,
+        opts: { recursive?: boolean },
+        onEvent: (event: string, filename: string | null) => void,
+      ) => {
+        if (!existsSync(path)) return;
+        try {
+          const w = watch(path, opts, (event, filename) => {
+            onEvent(event, filename?.toString() ?? null);
+          });
+          watchers.push(w);
+        } catch (err) {
+          console.warn(`⚠️ Could not watch ${path}:`, err);
+        }
+      };
+
+      // Never watch outDir — emit would loop.
+      if (existsSync(cfg.componentsDir)) {
+        watchPath(cfg.componentsDir, { recursive: true }, (event, name) => {
+          if (name && (name.endsWith('.ts') || name.endsWith('.js'))) {
+            schedule(`${event} ${name}`);
+          }
+        });
+      }
+
+      if (existsSync(cfg.tokensFile)) {
+        watchPath(cfg.tokensFile, {}, () => {
+          schedule(`tokens ${basename(cfg.tokensFile)}`);
+        });
+      }
+
+      for (const name of ['kitbash.config.ts', 'kitbash.config.js'] as const) {
+        const p = resolve(projectDir, name);
+        watchPath(p, {}, () => {
+          schedule(name);
+        });
+      }
+    };
+
+    const schedule = (reason: string) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void rebuild(reason);
+      }, 80);
+    };
 
     const rebuild = async (reason: string) => {
       if (building) {
@@ -163,60 +239,39 @@ async function main() {
       } catch (err) {
         console.error(`❌ Build failed:`, err);
       } finally {
+        // Always (re)bind watchers from latest loadable config — even after errors
+        // so path changes apply and a failed first build still watches sources.
+        try {
+          const cfg = await loadProjectConfig(projectDir);
+          attachWatchers(cfg, schedule);
+        } catch {
+          // config unreadable — keep previous watchers if any
+        }
         building = false;
         if (queued) {
           queued = false;
-          // Re-enter through debounce so bursts still coalesce
           schedule('queued');
         }
       }
     };
 
-    const schedule = (reason: string) => {
-      if (timer) clearTimeout(timer);
-      // Light debounce: coalesce bursty editor saves
-      timer = setTimeout(() => {
-        void rebuild(reason);
-      }, 80);
-    };
-
     console.log(`\n👀 kitbash dev — watching project at ${projectDir}\n`);
+    console.log(
+      '(Run from your design-system package root, not the monorepo root.)\n',
+    );
+
+    process.on('SIGINT', () => {
+      clearWatchers();
+      process.exit(0);
+    });
+
     await rebuild('initial');
-
-    const cfg = await loadProjectConfig(projectDir);
-
-    // Watch only sources — never outDir (would infinite-loop on emit).
-    const watchFile = (path: string, label: string) => {
-      if (!existsSync(path)) return;
-      try {
-        watch(path, () => schedule(label));
-      } catch (err) {
-        console.warn(`⚠️ Could not watch ${path}:`, err);
-      }
-    };
-
-    if (existsSync(cfg.componentsDir)) {
-      try {
-        watch(cfg.componentsDir, { recursive: true }, (event, filename) => {
-          const name = filename?.toString() ?? '';
-          if (name.endsWith('.ts') || name.endsWith('.js')) {
-            schedule(`${event} ${name}`);
-          }
-        });
-      } catch (err) {
-        console.warn(`⚠️ Could not watch ${cfg.componentsDir}:`, err);
-      }
-    }
-
-    watchFile(cfg.tokensFile, `tokens ${basename(cfg.tokensFile)}`);
-    watchFile(resolve(projectDir, 'kitbash.config.ts'), 'kitbash.config.ts');
-    watchFile(resolve(projectDir, 'kitbash.config.js'), 'kitbash.config.js');
-
     console.log('Watching components, tokens, and config (Ctrl+C to stop)…\n');
-    // Keep process alive
     await new Promise(() => {});
   } else {
+    console.error(`❌ Unknown command: ${command}`);
     printHelp();
+    process.exit(1);
   }
 }
 

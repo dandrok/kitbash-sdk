@@ -68,7 +68,9 @@ export default {
     // Single batch path preferred for input handlers
     expect(src).toContain('commit: this.commit.bind(this)');
     expect(src).toContain('setProps: this.setProps.bind(this)');
-    expect(src).toContain('props: this._props');
+    expect(src).toContain('props: { ...this._props }');
+    expect(src).toContain('state: { ...this._state }');
+    expect(src).toContain('hasOwnProperty.call(allowed, key)');
 
     // External property sets re-render without kitbash-change spam
     expect(src).toMatch(

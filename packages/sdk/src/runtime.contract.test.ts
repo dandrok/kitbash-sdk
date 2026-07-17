@@ -252,4 +252,14 @@ ${withoutImport}
 
     el.remove();
   });
+
+  test('commit ignores undeclared prop keys', () => {
+    const el = mount();
+    el.commit({
+      props: { value: 'ok', notAProp: 'nope' } as Record<string, unknown>,
+    });
+    expect(el.value).toBe('ok');
+    expect((el._props as Record<string, unknown>).notAProp).toBeUndefined();
+    el.remove();
+  });
 });

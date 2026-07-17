@@ -411,7 +411,7 @@ kitbash                       Print help
 |---------|--------|
 | `init` | Project name must be a single path segment (no `..` / nested paths). Refuses if the directory exists. Rewrites `workspace:*` SDK deps to the published version. Adds `build` + `dev` scripts. |
 | `build` | Loads optional `kitbash.config.ts`, compiles under `process.cwd()`. |
-| `dev` | Initial build, then watches components dir (+ tokens dir + project root for config). Debounced rebuilds. Does **not** start a browser server (use Vite/sandbox separately). |
+| `dev` | Initial build, then watches components + tokens + config. Re-binds watchers after each build (config path changes apply). Debounced. Does **not** start a browser server (use Vite/sandbox separately). Run from the design-system package root. |
 
 Add a script in your design-system `package.json`:
 
