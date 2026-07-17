@@ -5,23 +5,11 @@
 
 version: 2
 updates:
-  # 1. Manage the Monorepo Root (where bun.lockb / bun.lock lives)
   - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    # Groups minor/patch updates into single PRs to prevent spam
-    groups:
-      dependencies:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-
-  # 2. Automatically discover and manage all Workspace Packages
-  - package-ecosystem: "npm"
-    directory: "/packages/*" # Assumes your monorepo apps live in a "packages" folder
+    # Note the plural "directories" and the list format below
+    directories:
+      - "/"            # Scans the monorepo root
+      - "/packages/*"  # Scans all sub-packages inside the packages folder
     schedule:
       interval: "weekly"
     groups:
