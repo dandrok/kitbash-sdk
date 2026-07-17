@@ -6,7 +6,7 @@
  * 3) Scaffold via `kitbash init` into a temp dir and build it
  */
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -41,12 +41,31 @@ function assertFile(path: string): void {
 
 async function main() {
   console.log('🔨 Building @ktbsh/sdk…');
+  // Drop previous outputs so asserts cannot pass on stale artifacts.
+  await rm(resolve(sdkDir, 'dist'), { recursive: true, force: true });
+
+  const initReadmePath = resolve(sdkDir, 'templates/default/README.md');
+  const preservedInitReadme = existsSync(initReadmePath)
+    ? await Bun.file(initReadmePath).text()
+    : null;
+  await rm(resolve(sdkDir, 'templates/default'), {
+    recursive: true,
+    force: true,
+  });
+  // Init README is not embedded from the workspace fixture (build preserves it).
+  // Re-seed so a full wipe still exercises that path without losing the file.
+  if (preservedInitReadme !== null) {
+    await mkdir(resolve(sdkDir, 'templates/default'), { recursive: true });
+    await Bun.write(initReadmePath, preservedInitReadme);
+  }
+
   run(['bun', 'run', 'build'], sdkDir);
   assertFile(cliPath);
   assertFile(resolve(sdkDir, 'templates/default/package.json'));
   assertFile(resolve(sdkDir, 'templates/default/README.md'));
 
   console.log('\n🧱 Compiling workspace fixture (templates/default)…');
+  await rm(resolve(fixtureDir, 'dist'), { recursive: true, force: true });
   run(['bun', cliPath, 'build'], fixtureDir);
   assertFile(resolve(fixtureDir, 'dist/vanilla/button.js'));
   assertFile(resolve(fixtureDir, 'dist/vanilla/input.js'));
