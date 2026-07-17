@@ -161,7 +161,10 @@ async function main() {
     let building = false;
     let queued = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    /** Source watchers (cleared/rebuilt when config paths change). */
     const watchers: FSWatcher[] = [];
+    /** Sticky watchers (e.g. project root for config create) — never cleared. */
+    const stickyWatchers: FSWatcher[] = [];
 
     const clearWatchers = () => {
       for (const w of watchers) {
@@ -174,27 +177,31 @@ async function main() {
       watchers.length = 0;
     };
 
+    const watchPath = (
+      path: string,
+      opts: { recursive?: boolean },
+      onEvent: (event: string, filename: string | null) => void,
+      sticky = false,
+    ) => {
+      if (!existsSync(path)) return;
+      try {
+        const w = watch(path, opts, (event, filename) => {
+          onEvent(event, filename?.toString() ?? null);
+        });
+        w.on('error', (err) => {
+          console.warn(`⚠️ Watcher error (${path}):`, err);
+        });
+        (sticky ? stickyWatchers : watchers).push(w);
+      } catch (err) {
+        console.warn(`⚠️ Could not watch ${path}:`, err);
+      }
+    };
+
     const attachWatchers = (
       cfg: KitbashProjectConfig,
       schedule: (reason: string) => void,
     ) => {
       clearWatchers();
-
-      const watchPath = (
-        path: string,
-        opts: { recursive?: boolean },
-        onEvent: (event: string, filename: string | null) => void,
-      ) => {
-        if (!existsSync(path)) return;
-        try {
-          const w = watch(path, opts, (event, filename) => {
-            onEvent(event, filename?.toString() ?? null);
-          });
-          watchers.push(w);
-        } catch (err) {
-          console.warn(`⚠️ Could not watch ${path}:`, err);
-        }
-      };
 
       // Never watch outDir — emit would loop.
       if (existsSync(cfg.componentsDir)) {
@@ -213,9 +220,11 @@ async function main() {
 
       for (const name of ['kitbash.config.ts', 'kitbash.config.js'] as const) {
         const p = resolve(projectDir, name);
-        watchPath(p, {}, () => {
-          schedule(name);
-        });
+        if (existsSync(p)) {
+          watchPath(p, {}, () => {
+            schedule(name);
+          });
+        }
       }
     };
 
@@ -260,8 +269,27 @@ async function main() {
       '(Run from your design-system package root, not the monorepo root.)\n',
     );
 
+    // Always watch project root for config create/rename (even if file missing).
+    watchPath(
+      projectDir,
+      {},
+      (_event, name) => {
+        if (name === 'kitbash.config.ts' || name === 'kitbash.config.js') {
+          schedule(`config ${name}`);
+        }
+      },
+      true,
+    );
+
     process.on('SIGINT', () => {
       clearWatchers();
+      for (const w of stickyWatchers) {
+        try {
+          w.close();
+        } catch {
+          // ignore
+        }
+      }
       process.exit(0);
     });
 

@@ -40,7 +40,7 @@ You get a short authoring surface; consumers get real custom elements that work 
 | **DX** | `kitbash init` scaffold, `kitbash build`, CEM for editors |
 | **Runtime deps for consumers** | Vanilla bundles bake in `uhtml` — no extra install for end apps |
 
-**Not (yet):** full Svelte wrapper codegen (use vanilla tags), `frameworks` config toggles, watch mode (`kitbash dev`), Storybook plugin, etc. (see [Known limitations (0.1.x)](#known-limitations-01x)).
+**Not (yet):** full Svelte wrapper codegen (use vanilla tags), `frameworks` config toggles, built-in browser server/HMR, Storybook plugin, etc. (see [Known limitations (0.1.x)](#known-limitations-01x)).
 
 ---
 
@@ -227,6 +227,8 @@ The compiler pins **`uhtml@4.7.1`**. v5’s signal rewrite and some conditional-
 ### Hard rule: no outer closures
 
 `render` and `events` handlers are **serialized with `.toString()`** into the generated custom element. They do **not** keep a real JS closure over your module.
+
+**Snapshots, not deep clones:** `commit` / `kitbash-change` / handler `props` & `state` are **shallow** copies. Nested objects/arrays inside props remain shared references — mutate them only via `commit`, or treat them as read-only.
 
 | OK | Not OK |
 |----|--------|

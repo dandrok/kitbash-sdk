@@ -53,7 +53,12 @@ export async function loadProjectConfig(
         source = name as KitbashProjectConfig['source'];
       }
     } catch (err) {
-      console.warn(`⚠️ Failed to load ${name}:`, err);
+      // Fail hard — do not silently fall back to default paths with a broken config
+      throw new Error(
+        `Failed to load ${name}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
     break;
   }

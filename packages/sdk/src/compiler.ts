@@ -89,7 +89,7 @@ function generateVanillaComponent(
   const formValueSync = config.formAssociated
     ? `
     if (key === 'value' && this._internals) {
-      this._internals.setFormValue(val == null ? null : String(val));
+      this._internals.setFormValue(next == null ? null : String(next));
     }`
     : '';
 
@@ -168,7 +168,8 @@ ${propsArray
     let parsedValue = newValue;
     if (newValue === null || newValue === undefined) {
       parsedValue = this._defaults[name];
-    } else if (type === 'Number') {
+    } else if (type === 'Number' && newValue !== '') {
+      // Match property coercion: empty string is not Number('') → 0
       parsedValue = Number(newValue);
     } else if (type === 'Boolean') {
       parsedValue = newValue !== null && newValue !== 'false';
@@ -402,9 +403,9 @@ export declare const ${pascalName}: React.ForwardRefExoticComponent<${pascalName
 }
 
 export type CompileOptions = {
-  /** Absolute components directory (default: projectDir/src/components) */
+  /** Absolute or projectDir-relative components directory */
   componentsDir?: string;
-  /** Absolute tokens JSON path (default: projectDir/src/tokens.json) */
+  /** Absolute or projectDir-relative tokens JSON path */
   tokensFile?: string;
 };
 

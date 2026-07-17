@@ -29,7 +29,7 @@ describe('runProjectBuild', () => {
 
   test('builds default paths and returns config', async () => {
     const cfg = await runProjectBuild(dir);
-    expect(cfg.outDir).toContain(dir);
+    expect(cfg.outDir).toBe(join(dir, 'dist'));
     expect(await Bun.file(join(cfg.outDir, 'vanilla/chip.js')).exists()).toBe(
       true,
     );
