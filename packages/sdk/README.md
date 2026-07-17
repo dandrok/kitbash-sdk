@@ -37,7 +37,7 @@ You get a short authoring surface; consumers get real custom elements that work 
 | **DX** | `kitbash init` scaffold, `kitbash build`, CEM for editors |
 | **Runtime deps for consumers** | Vanilla bundles bake in `uhtml` — no extra install for end apps |
 
-**Not (yet):** full Svelte wrapper codegen (use vanilla tags), config-driven `outDir`/framework toggles (see [Known limitations](#known-limitations)), watch mode, Storybook plugin, etc.
+**Not (yet):** full Svelte wrapper codegen (use vanilla tags), config-driven `outDir`/framework toggles (see [Known limitations (0.1.x)](#known-limitations-01x)), watch mode, Storybook plugin, etc.
 
 ---
 
