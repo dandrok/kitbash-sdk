@@ -50,7 +50,7 @@
     "src"
   ],
   "dependencies": {
-    "uhtml": "4.7.1"
+    "uhtml": "5.0.9"
   },
   "devDependencies": {
     "@playwright/test": "1.52.0",
