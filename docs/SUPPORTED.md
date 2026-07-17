@@ -30,7 +30,7 @@ It is **not** a finished design system (no official button kit, themes, or produ
 | Outputs | `dist/vanilla/*`, `dist/react/*`, `dist/custom-elements.json` |
 | Paths | Defaults `src/components` → `dist/`; overridable via `kitbash.config.ts` |
 | Frameworks | Vanilla + React codegen; Svelte via vanilla tags (`frameworks` key reserved) |
-| Tests | Compiler source + runtime CE contracts + config tests + monorepo smoke |
+| Tests | Compiler source + runtime CE (happy-dom) + Playwright minified bundle + config + smoke |
 
 ## Explicit non-goals (for now)
 

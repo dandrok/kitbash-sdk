@@ -53,11 +53,15 @@
     "uhtml": "4.7.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.52.0",
     "bun-types": "1.3.14",
     "happy-dom": "20"
   },
   "scripts": {
     "build": "bun run scripts/build.ts && bun build ./src/cli.ts --outfile ./dist/cli.js --target bun",
-    "test": "bun test src"
+    "test": "bun test src",
+    "test:browser:prepare": "bun run e2e/prepare.ts",
+    "test:browser": "bun run test:browser:prepare && bun test e2e/browser-runtime.bun.test.ts",
+    "test:all": "bun run test && bun run test:browser"
   }
 }

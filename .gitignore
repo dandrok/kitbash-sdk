@@ -8,3 +8,9 @@ TODO.md
 # pack / publish artifacts
 *.tgz
 packages/sdk/*.tgz
+# Playwright / browser e2e fixtures & reports
+packages/sdk/e2e/fixture-dist
+packages/sdk/e2e/.project
+packages/sdk/test-results
+packages/sdk/playwright-report
+packages/sdk/blob-report
