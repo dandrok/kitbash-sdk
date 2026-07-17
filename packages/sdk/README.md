@@ -604,6 +604,9 @@ If you are hacking on the SDK itself (not only consuming it from npm):
 # from repo root
 bun install
 bun run --filter @ktbsh/sdk build   # or: cd packages/sdk && bun run build
+bun run test:sdk                    # unit / happy-dom contract tests
+bun run test:browser                # Chromium + minified vanilla (real uhtml)
+# first time: cd packages/sdk && bunx playwright install chromium
 ```
 
 - Compiler: `packages/sdk/src/compiler.ts`

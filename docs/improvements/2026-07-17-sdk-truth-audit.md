@@ -19,7 +19,7 @@
 
 | Priority | Item |
 |----------|------|
-| P2 | Playwright / real browser on **minified** vanilla (real uhtml) |
+| ~~P2~~ | ~~Playwright / real browser on **minified** vanilla (real uhtml)~~ → **done** (`packages/sdk/e2e`, `bun run test:browser`) |
 | P2 | Dev ESM `?t=` only busts entry modules — transitive imports may stay cached |
 | P3 | Strip `*.src.js` from consumer publish artifacts |
 | P3 | Event delegation (no rebind every update) |
