@@ -69,7 +69,7 @@
 ## Recommended next loops (order)
 
 1. **This audit loop:** doc fixes only (config banner, ideas table, link SUPPORTED.md) — no compiler churn  
-2. **Runtime contract tests** (CR): load generated CE / React wrapper and assert `commit` + `kitbash-change` behavior (not only source string search)  
+2. ~~**Runtime contract tests** (CR): load generated CE and assert `commit` + `kitbash-change`~~ → **done** (`runtime.contract.test.ts` via happy-dom + uhtml mock)
 3. **Serialization hard-doc + tiny contract test** if we can assert “don’t close over” via docs + example  
 4. **Config honesty:** wire *or* rename to `kitbash.config.example.ts`  
 5. **Watch / dev story**  

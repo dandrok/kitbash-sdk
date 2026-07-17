@@ -553,7 +553,7 @@ Contributions and experiments welcome. High-value directions:
 | **CSS / token pipeline** | Themes, dark mode maps, reference to CSS files |
 | **Source maps & better errors** | Map compile failures back to authoring files |
 | **Node-compatible CLI build** | Wider install story if Bun-only is a blocker |
-| **Broader compiler snapshots** | Expand beyond form/change contract tests |
+| **Broader compiler snapshots** | Expand beyond form/change + runtime contract tests |
 | **`exports` map in scaffold** | Publish-ready package.json from `init` |
 | **Strip or gitignore `*.src.js`** | Cleaner publish artifacts |
 

@@ -30,7 +30,7 @@ It is **not** a finished design system (no official button kit, themes, or produ
 | Outputs | `dist/vanilla/*`, `dist/react/*`, `dist/custom-elements.json` |
 | Paths | Fixed: `src/components` → `dist/` (cwd) |
 | Frameworks | Vanilla + React codegen; Svelte via vanilla tags |
-| Tests | Compiler contract tests + monorepo smoke (`init` + fixture build) |
+| Tests | Compiler source contract tests + runtime CE contract tests (happy-dom) + monorepo smoke (`init` + fixture build) |
 
 ## Explicit non-goals (for now)
 
