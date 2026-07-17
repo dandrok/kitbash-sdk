@@ -122,12 +122,12 @@ describe('browser minified vanilla field (real uhtml)', () => {
         .value;
     });
     expect(hostValue).toBe('hello-browser');
-    // With delegatesFocus, document.activeElement is often the host; shadow activeElement is the input.
+    // delegatesFocus: host is document.activeElement; input should be shadow activeElement.
     const focusOk = await page.evaluate(() => {
       const host = document.getElementById('field');
       const shadowActive = host?.shadowRoot?.activeElement;
       return (
-        document.activeElement === host || shadowActive?.tagName === 'INPUT'
+        document.activeElement === host && shadowActive?.tagName === 'INPUT'
       );
     });
     expect(focusOk).toBe(true);
@@ -140,6 +140,13 @@ describe('browser minified vanilla field (real uhtml)', () => {
       k.events.length = 0;
       k.setValue('from-outside');
     });
+    // Allow a render/task turn so a late incorrect event would still be observed
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
 
     expect(
       await page.evaluate(

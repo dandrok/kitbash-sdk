@@ -17,7 +17,7 @@ type MockInternals = {
  * Boundary: we load the compiler's **.src.js** (pre-bundle) with a tiny `uhtml`
  * mock. happy-dom's HTML parser mishandles uhtml's Unicode marker attributes,
  * so the minified bundle cannot run here. Minified + real uhtml is covered by
- * Playwright e2e (`bun run test:browser` / e2e/browser-runtime.spec.ts).
+ * Playwright e2e (`bun run test:browser` / e2e/browser-runtime.bun.test.ts).
  */
 describe('runtime form / change contract', () => {
   let projectDir: string;
