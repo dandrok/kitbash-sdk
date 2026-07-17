@@ -10,6 +10,9 @@ You author a single TypeScript config (`defineComponent`). The CLI evaluates it,
 
 This project is early (`0.1.x`) and intentionally experimental. The goal is a practical loop for trying design-system ideas: define → compile → drop into React, Svelte, or plain HTML. APIs and output shape will evolve as real usage teaches what matters.
 
+**Supported surface (what works / what does not):** monorepo [`docs/SUPPORTED.md`](../../docs/SUPPORTED.md).  
+**Audit / improvement notes:** monorepo [`docs/improvements/`](../../docs/improvements/).
+
 ---
 
 ## Why this exists
@@ -543,17 +546,18 @@ Contributions and experiments welcome. High-value directions:
 | Idea | Why |
 |------|-----|
 | **Watch mode** (`kitbash dev`) | Faster authoring loop with rebuild on save |
-| **Honor `kitbash.config.ts`** | Custom `outDir`, token path, framework targets |
+| **Honor `kitbash.config.ts` or stop shipping it as live config** | Honesty: file is ignored today |
 | **Svelte / Vue wrapper codegen** | First-class DX beyond vanilla tags |
 | **Richer CEM** | Events, slots, CSS parts/properties for docs tools |
 | **Stable public runtime helpers** | Shared utilities without relying on serialized closures |
-| **Controlled/uncontrolled input recipe** | Documented + tested pattern for React forms |
 | **CSS / token pipeline** | Themes, dark mode maps, reference to CSS files |
 | **Source maps & better errors** | Map compile failures back to authoring files |
 | **Node-compatible CLI build** | Wider install story if Bun-only is a blocker |
-| **Unit tests around compiler output** | Snapshot vanilla/React emit for regressions |
+| **Broader compiler snapshots** | Expand beyond form/change contract tests |
 | **`exports` map in scaffold** | Publish-ready package.json from `init` |
 | **Strip or gitignore `*.src.js`** | Cleaner publish artifacts |
+
+**Done recently:** controlled input via `commit` + React bridge + event detail snapshots + contract tests (see changelog / recent commits).
 
 If you try Kitbash on a real system, issues and “this surprised me” notes are especially useful — early APIs should bend toward real workflows.
 

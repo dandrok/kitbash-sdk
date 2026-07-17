@@ -5,6 +5,7 @@ Small monorepo for **Kitbash** — a compiler-driven toolkit that turns a single
 Early project (`0.1.x`). The idea is simple: define components once, compile them, and try them in plain HTML, React, or Svelte while the API is still free to evolve.
 
 **Using the published package?** Start here → [`packages/sdk/README.md`](./packages/sdk/README.md)  
+**Supported surface / non-goals:** [`docs/SUPPORTED.md`](./docs/SUPPORTED.md)  
 **npm:** [`@ktbsh/sdk`](https://www.npmjs.com/package/@ktbsh/sdk)
 
 ---
