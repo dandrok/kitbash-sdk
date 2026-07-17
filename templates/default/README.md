@@ -43,15 +43,23 @@ bun run dev
 
 ---
 
-## Relationship to `kitbash init`
+## Relationship to `kitbash init` / package embed
+
+**This directory (`templates/default`) is the canonical source** for scaffold components, tokens, and `package.json`.
 
 | | This folder (`templates/default`) | `packages/sdk/templates/default` |
 |--|-----------------------------------|----------------------------------|
-| Used by | Sandbox, monorepo dev loop | `kitbash init <name>` for users |
+| Role | Canonical fixture + sandbox input | Embedded copy shipped with `@ktbsh/sdk` / used by `kitbash init` |
+| Used by | Sandbox, `bun run dev` | CLI `init` (from the published package) |
 | SDK dependency | Often `workspace:*` | Rewritten to a semver range on init |
 | `dist/` | Expected after local builds | Not shipped; users run `bun run build` |
+| README | Monorepo contributor docs (this file) | User-project docs only — **not** overwritten by the template sync |
 
-When you improve the starter components or tokens, update **both** trees so init users and the sandbox stay consistent.
+### Editing workflow
+
+1. Change components / tokens / scaffold config **here first**.
+2. From `packages/sdk`, run `bun run build` (runs `scripts/build.ts`) to regenerate `packages/sdk/templates/default` from this tree.
+3. Do **not** edit scaffold sources only under `packages/sdk/templates/default` — the next package build copies from here and will overwrite those files (except the init `README.md`, which is preserved separately).
 
 ---
 
