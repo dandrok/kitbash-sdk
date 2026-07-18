@@ -20,7 +20,8 @@ templates/default/
 │   ├── tokens.json     # → CSS variables on :host at compile time
 │   └── components/
 │       ├── button.ts   # <my-button> — slots, variants, state
-│       └── input.ts    # <kitbash-input> — formAssociated example
+│       ├── input.ts    # <kitbash-input> — formAssociated example
+│       └── modal.ts    # <kitbash-modal> — open flag, title, default slot
 └── dist/               # generated (git may or may not track; rebuild locally)
 ```
 
