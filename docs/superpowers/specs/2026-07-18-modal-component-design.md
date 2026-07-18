@@ -39,7 +39,7 @@ Add a simple `kitbash-modal` sample component under `templates/default`, control
 
 ### Render sketch (authoring intent)
 
-```
+```text
 :host[hidden or not open] → display: none (or :host(:not([open])) display: none)
 backdrop part
 panel part
