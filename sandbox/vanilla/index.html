@@ -10,6 +10,18 @@
     <script type="module">
       import '../../templates/default/dist/vanilla/button.js';
       import '../../templates/default/dist/vanilla/input.js';
+      import '../../templates/default/dist/vanilla/modal.js';
+
+      const modal = document.getElementById('demo-modal');
+      document.getElementById('open-modal')?.addEventListener('click', () => {
+        modal.open = true;
+      });
+      document.getElementById('close-modal')?.addEventListener('click', () => {
+        modal.open = false;
+      });
+      document.getElementById('alert-modal')?.addEventListener('click', () => {
+        alert('Hello from the vanilla modal!');
+      });
     </script>
     <my-button variant="primary" onclick="alert('Vanilla event triggered')">Click Me (Vanilla)</my-button>
 
@@ -17,6 +29,18 @@
       <kitbash-input name="username" required="true" placeholder="Enter username..."></kitbash-input>
       <button type="submit" style="margin-left: 10px;">Submit</button>
     </form>
+
+    <div style="margin-top: 24px;">
+      <h2>Modal</h2>
+      <my-button id="open-modal" variant="secondary">Open modal</my-button>
+      <kitbash-modal id="demo-modal" title="Vanilla modal">
+        <p style="margin: 0 0 12px;">Slot content — close or fire an alert.</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <my-button id="close-modal" variant="secondary">Close</my-button>
+          <my-button id="alert-modal" variant="primary">Trigger alert</my-button>
+        </div>
+      </kitbash-modal>
+    </div>
   </div>
 </body>
 </html>

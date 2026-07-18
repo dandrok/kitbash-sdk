@@ -21,7 +21,8 @@ bunx @ktbsh/sdk init my-design-system
     ├── tokens.json
     └── components/
         ├── button.ts
-        └── input.ts
+        ├── input.ts
+        └── modal.ts
 ```
 
 ## Next steps
@@ -45,6 +46,7 @@ Output lands in `dist/`:
 |------|-----|--------|
 | `src/components/button.ts` | `my-button` | Variants, slot, click state |
 | `src/components/input.ts` | `kitbash-input` | `formAssociated`, focus delegation |
+| `src/components/modal.ts` | `kitbash-modal` | `open` flag, optional `title`, default slot |
 
 **Vanilla:**
 
