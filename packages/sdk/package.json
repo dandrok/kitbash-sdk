@@ -53,8 +53,8 @@
     "uhtml": "4.7.1"
   },
   "devDependencies": {
-    "@playwright/test": "1.52.0",
-    "bun-types": "1.3.14",
+    "@playwright/test": "1.62.1",
+    "bun-types": "1.4.0",
     "happy-dom": "20"
   },
   "scripts": {
